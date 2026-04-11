@@ -201,9 +201,9 @@ st.markdown("""
     🛡️ Leveraging Machine Learning Algorithms for detecting Money Laundering patterns in Financial Transactions — Three-Stage Pipeline
   </h1>
   <div style='margin-top:10px;display:flex;gap:8px;flex-wrap:wrap'>
-    <span class='stage-badge badge-s1'>Stage 1 · IBM Gold Standard</span>
+    <span class='stage-badge badge-s1'>Stage 1 · Labeled Dataset (IBM)</span>
     <span class='stage-badge badge-s2'>Stage 2 · Pattern Bridge</span>
-    <span class='stage-badge badge-s3'>Stage 3 · Interswitch Field Test</span>
+    <span class='stage-badge badge-s3'>Stage 3 · Unlabeled Field Test (ISW)</span>
   </div>
 </div>""", unsafe_allow_html=True)
 
@@ -219,10 +219,10 @@ with st.sidebar:
     isw_ready       = os.path.exists(os.path.join(PROC_DIR, 'features_full.csv'))
 
     for label, ready in [
-        ("Stage 1 — IBM Trained",  ibm_model_ready),
+        ("Stage 1 — Labeled Model",  ibm_model_ready),
         ("Stage 2 — Bridge Built", bridge_ready),
-        ("Stage 3 — ISW Scored",   scored_ready),
-        ("Interswitch Processed",  isw_ready),
+        ("Stage 3 — Unlabeled Scored",   scored_ready),
+        ("African Data Processed",  isw_ready),
     ]:
         st.markdown(f"{'✅' if ready else '⏳'} {label}")
 
@@ -238,9 +238,9 @@ with st.sidebar:
 
 # ── TABS ─────────────────────────────────────────────────────────────
 tab1,tab2,tab3,tab4,tab5,tab6,tab7 = st.tabs([
-    "🏆 IBM Leaderboard",
+    "🏆 Labeled Dataset (Gold Standard)",
     "🔗 Pattern Bridge",
-    "🌐 Interswitch Network",
+    "🌐 Unlabeled Data Network",
     "🧠 XAI Truth Panel",
     "🎯 Live Detection",
     "⚙️ Rule Management",
@@ -248,12 +248,12 @@ tab1,tab2,tab3,tab4,tab5,tab6,tab7 = st.tabs([
 ])
 
 # ════════════════════════════════════════════════════════════════════
-# TAB 1 — IBM LEADERBOARD (Stage 1)
+# TAB 1 — LABELED LEADERBOARD (Stage 1)
 # ════════════════════════════════════════════════════════════════════
 with tab1:
-    st.markdown("### 🏆 Stage 1: IBM Gold Standard — Model Performance")
+    st.markdown("### 🏆 Stage 1: Labeled Dataset (Gold Standard) — Model Performance")
     st.markdown(
-        "*Trained on labeled IBM HI-Large AML dataset. These definitive metrics prove "
+        "*Trained on labeled global AML dataset (IBM). These definitive metrics prove "
         "scientific validity of the Tri-Layer Defense system.*"
     )
     df_res = load_ibm_results()
