@@ -1,0 +1,20 @@
+# CSV and Data Files
+*.csv
+*.txt
+*.json
+*.pkl
+
+# Directories to ignore
+IBM_AML_DATA/
+data/models/
+data/processed/
+data/shap/
+__pycache__/
+
+# Scratch and Large Files
+large_files.txt
+*.log
+
+# Windows etc
+.DS_Store
+Thumbs.db

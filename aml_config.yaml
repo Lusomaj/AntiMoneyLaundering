@@ -1,0 +1,92 @@
+three_stage_pipeline:
+  stage1_ibm:
+    ibm_dataset_path: IBM_AML_DATA/HI-Large_Trans.csv
+    ibm_patterns_path: IBM_AML_DATA/HI-Large_Patterns.txt
+    ibm_sample_size: 500000
+    ibm_fraud_oversample: 50
+    min_fraud_rows: 200
+    ibm_model_output: data/models/ibm_best_model.pkl
+    ibm_results_output: data/models/ibm_model_comparison.csv
+    ibm_shap_output: data/shap/ibm_shap
+    ibm_feature_map:
+      source: Account_From
+      target: Account_To
+      from_bank: From_Bank
+      to_bank: To_Bank
+      amount: Amount_Paid
+      currency: Payment_Currency
+      tran_type: Payment_Format
+      timestamp: Timestamp
+      label: Is_Laundering
+    payment_format_risk:
+      Bitcoin: 3
+      Cash: 2
+      Wire: 2
+      ACH: 1
+      Cheque: 1
+      Credit Card: 0
+      Reinvestment: 0
+  stage2_bridge:
+    bridge_output: data/processed/pattern_bridge.json
+    similarity_threshold: 0.3
+    motif_types:
+    - circular
+    - smurfing
+    - reversal
+  stage3_fieldtest:
+    fieldtest_output: data/processed/interswitch_scored.csv
+    kpi_output: data/processed/operational_kpis.json
+    fp_reduction_target: 0.3
+    latency_target_ms: 500
+    xai_coverage_target: 0.8
+hard_rules:
+  high_risk_countries:
+  - Somalia
+  - South Sudan
+  - DRC
+  - Libya
+  - Yemen
+  - Sudan
+  - North Korea
+  - Iran
+  - Dubai
+  high_risk_transaction_types:
+  - TRANSFER
+  - WITHDRAWAL
+  - CASH_OUT
+  - REVERSAL
+  amount_threshold_ugx: 100000
+  smurfing_low_amount_ugx: 100000
+  rapid_reversal_window_minutes: 15
+  smurfing_fan_out_count: 5
+  smurfing_window_hours: 1
+  velocity_max_tx_per_hour: 10
+  circular_flow_max_depth: 4
+  terminal_high_tx_threshold: 50
+super_node:
+  card_col: encryptedCard
+  account_col: from_account_id
+  terminal_col: terminal_id
+  amount_col: settleAmountReq
+  datetime_col: datetimeReq
+  tran_type_col: tran_type_desciption
+sampling:
+  sna_sample_size: 150000
+  training_sample_size: 200000
+model:
+  random_state: 42
+  test_size: 0.2
+  val_size: 0.25
+  smote_sampling_strategy: 0.3
+  rf_n_estimators: 200
+  xgb_n_estimators: 200
+  mlp_hidden_layers:
+  - 128
+  - 64
+  - 32
+  mlp_max_iter: 300
+paths:
+  processed_dir: data/processed
+  models_dir: data/models
+  shap_dir: data/shap
+  graphs_dir: data/graphs
