@@ -2,9 +2,9 @@ three_stage_pipeline:
   stage1_ibm:
     ibm_dataset_path: IBM_AML_DATA/HI-Large_Trans.csv
     ibm_patterns_path: IBM_AML_DATA/HI-Large_Patterns.txt
-    ibm_sample_size: 500000
+    ibm_sample_size: 200000
     ibm_fraud_oversample: 50
-    min_fraud_rows: 200
+    min_fraud_rows: 1000
     ibm_model_output: data/models/ibm_best_model.pkl
     ibm_results_output: data/models/ibm_model_comparison.csv
     ibm_shap_output: data/shap/ibm_shap
@@ -28,7 +28,7 @@ three_stage_pipeline:
       Reinvestment: 0
   stage2_bridge:
     bridge_output: data/processed/pattern_bridge.json
-    similarity_threshold: 0.3
+    similarity_threshold: 0.5
     motif_types:
     - circular
     - smurfing
@@ -39,6 +39,7 @@ three_stage_pipeline:
     fp_reduction_target: 0.3
     latency_target_ms: 500
     xai_coverage_target: 0.8
+    alert_threshold: 0.25
 hard_rules:
   high_risk_countries:
   - Somalia
@@ -55,7 +56,8 @@ hard_rules:
   - WITHDRAWAL
   - CASH_OUT
   - REVERSAL
-  amount_threshold_ugx: 100000
+  amount_threshold_ugx: 10000000
+  amount_threshold_usd: 5000
   smurfing_low_amount_ugx: 100000
   rapid_reversal_window_minutes: 15
   smurfing_fan_out_count: 5

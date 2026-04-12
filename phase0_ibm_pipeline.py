@@ -18,6 +18,10 @@ import os, sys, pickle, warnings, json
 warnings.filterwarnings('ignore')
 sys.path.insert(0, os.path.dirname(__file__))
 
+# Force UTF-8 stdout so Unicode chars (→ ✅ ⏳) don't crash on Windows cp1252
+if sys.stdout.encoding and sys.stdout.encoding.lower() != 'utf-8':
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+
 import numpy as np
 import pandas as pd
 

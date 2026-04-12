@@ -90,22 +90,32 @@ def load_ibm_dataset(ibm_path: str, tl_cfg: dict, root_dir: str = '.') -> pd.Dat
                 if len(normal_rows) < normal_cap:
                     normal_rows.append(parsed)
 
-            if len(normal_rows) >= normal_cap and i > sample_size * 2:
-                break
+            if len(normal_rows) >= normal_cap and i > sample_size * 10:
+                break  # Safety limit: scan at most 10x normal cap rows
 
     fraud_count  = len(fraud_rows)
     normal_count = len(normal_rows)
-    print(f"[IBM Loader] Loaded: {normal_count:,} normal | {fraud_count:,} fraud")
+    print(f"[IBM Loader] Raw scan: {normal_count:,} normal | {fraud_count:,} fraud")
 
     if fraud_count == 0:
-        raise ValueError("[IBM Loader] No fraud rows found in sample! Increase ibm_sample_size.")
+        raise ValueError("[IBM Loader] No fraud rows in dataset. Check ibm_dataset_path.")
 
-    # Oversample fraud rows to reach minimum useful count
-    min_fraud = tl_cfg.get('min_fraud_rows', 200)
+    # Rebalance: cap normal to 60x fraud for ~1.6% fraud density
+    # This is equivalent to the documented IBM dataset fraud rate
+    normal_target = min(normal_count, fraud_count * 60)
+    if normal_target < normal_count:
+        import random as _rnd
+        _rnd.seed(42)
+        normal_rows = _rnd.sample(normal_rows, normal_target)
+        print(f"[IBM Loader] Rebalanced: {len(normal_rows):,} normal ({fraud_count*60} cap) | {fraud_count:,} fraud")
+
+    # Oversample fraud rows to hit min_fraud_rows floor (for SMOTE to work)
+    min_fraud = tl_cfg.get('min_fraud_rows', 1000)
     if fraud_count < min_fraud:
         repeat_times = (min_fraud // fraud_count) + 1
         fraud_rows = fraud_rows * repeat_times
-        print(f"[IBM Loader] Fraud rows oversampled: {len(fraud_rows):,}")
+        fraud_rows = fraud_rows[:min_fraud]
+        print(f"[IBM Loader] Fraud oversampled to hit min floor: {len(fraud_rows):,}")
 
     # Combine
     all_rows = normal_rows + fraud_rows

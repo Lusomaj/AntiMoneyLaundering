@@ -8,6 +8,10 @@ import os, sys, pickle, yaml, warnings
 warnings.filterwarnings('ignore')
 sys.path.insert(0, os.path.dirname(__file__))
 
+# Force UTF-8 stdout so Unicode chars (→ ✅ ⏳) don't crash on Windows cp1252
+if sys.stdout.encoding and sys.stdout.encoding.lower() != 'utf-8':
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+
 from aml_engine.data_loader      import load_config, load_and_merge
 from aml_engine.graph_builder    import build_graph, compute_sna_features, save_graph
 from aml_engine.motif_detector   import apply_motif_features

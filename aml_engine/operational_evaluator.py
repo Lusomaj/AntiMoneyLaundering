@@ -26,30 +26,35 @@ def compute_fp_reduction(df: pd.DataFrame, ml_probs: np.ndarray,
                           ml_threshold: float = 0.5) -> Dict:
     """
     Compare Rules-Only alerts vs ML+SNA alerts.
-    'False positive reduction' = rule alerts that ML scores as LOW risk.
-
-    In the absence of labels, we define:
-      - Rules-Only alert: rule_triggered == 1
-      - ML+SNA confirmation: ml_prob >= threshold
-      - Filtered (likely FP): rule_triggered==1 but ml_prob < threshold
+    Prefers df['ml_flagged'] when present (honours relative-threshold flagging).
+    Falls back to ml_probs >= ml_threshold otherwise.
     """
     if 'rule_triggered' not in df.columns:
         return {'error': 'rule_triggered column not found'}
 
-    rule_alerts     = df['rule_triggered'].sum()
-    ml_flags        = (ml_probs >= ml_threshold).sum()
-    rule_confirmed  = ((df['rule_triggered'] == 1) & (ml_probs >= ml_threshold)).sum()
-    rule_filtered   = ((df['rule_triggered'] == 1) & (ml_probs < ml_threshold)).sum()
+    rule_alerts = int(df['rule_triggered'].sum())
+
+    # Use pre-computed ml_flagged if available — this column reflects the
+    # actual threshold used (relative percentile), not the default 0.5.
+    if 'ml_flagged' in df.columns:
+        flag_series  = df['ml_flagged'].astype(int)
+    else:
+        flag_series  = (ml_probs >= ml_threshold).astype(int)
+
+    ml_flags        = int(flag_series.sum())
+    rule_confirmed  = int(((df['rule_triggered'] == 1) & (flag_series == 1)).sum())
+    rule_filtered   = int(((df['rule_triggered'] == 1) & (flag_series == 0)).sum())
 
     fp_reduction = rule_filtered / max(rule_alerts, 1)
 
     return {
         'total_transactions':    int(len(df)),
-        'rule_only_alerts':      int(rule_alerts),
-        'ml_sna_flags':          int(ml_flags),
-        'rule_alerts_confirmed': int(rule_confirmed),
-        'rule_alerts_filtered':  int(rule_filtered),   # likely FPs
+        'rule_only_alerts':      rule_alerts,
+        'ml_sna_flags':          ml_flags,
+        'rule_alerts_confirmed': rule_confirmed,
+        'rule_alerts_filtered':  rule_filtered,
         'fp_reduction_rate':     round(float(fp_reduction), 4),
+        'threshold_used':        round(float(ml_threshold), 6),
         'interpretation': (
             f"The ML+SNA layer filtered out {rule_filtered:,} ({fp_reduction:.1%}) of "
             f"rule-triggered alerts that scored LOW on the behavioural model, "
@@ -171,7 +176,8 @@ def build_operational_kpis(df: pd.DataFrame,
                             shap_values: np.ndarray,
                             feature_names: list,
                             cfg: dict,
-                            output_dir: str) -> dict:
+                            output_dir: str,
+                            ml_threshold: float = 0.5) -> dict:
     """
     Compute all three operational KPIs and save to JSON.
     """
@@ -179,7 +185,7 @@ def build_operational_kpis(df: pd.DataFrame,
 
     s3_cfg = cfg.get('three_stage_pipeline', {}).get('stage3_fieldtest', {})
 
-    fp_kpi = compute_fp_reduction(df, ml_probs, ml_threshold=0.5)
+    fp_kpi  = compute_fp_reduction(df, ml_probs, ml_threshold=ml_threshold)
     lat_kpi = measure_inference_latency(model_bundle, X_sample,
                                          batch_size=100, n_trials=5)
     xai_kpi = compute_explainability_score(shap_values, feature_names,

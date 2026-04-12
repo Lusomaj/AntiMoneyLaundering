@@ -22,6 +22,10 @@ import os, sys, pickle, json, warnings
 warnings.filterwarnings('ignore')
 sys.path.insert(0, os.path.dirname(__file__))
 
+# Force UTF-8 stdout so Unicode chars (→ ✅ ⏳) don't crash on Windows cp1252
+if sys.stdout.encoding and sys.stdout.encoding.lower() != 'utf-8':
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+
 import numpy as np
 import pandas as pd
 
@@ -102,6 +106,24 @@ def main():
     elif X_isw.shape[1] > ibm_feat_count:
         X_isw = X_isw[:, :ibm_feat_count]
 
+    # ── Domain Adaptation: percentile-clip to IBM training range ───
+    # Without this, ISW features (UGX-scale, smaller graph) land outside
+    # the IBM decision boundary and the model assigns near-zero probability
+    # to every Interswitch transaction regardless of genuine risk level.
+    ibm_stats_path = os.path.join(ibm_models_dir, 'ibm_feature_stats.pkl')
+    if os.path.exists(ibm_stats_path):
+        with open(ibm_stats_path, 'rb') as _f:
+            ibm_stats = pickle.load(_f)
+        feat_names_clipped = feature_names[:ibm_feat_count]
+        for j, feat in enumerate(feat_names_clipped):
+            if feat in ibm_stats:
+                lo = ibm_stats[feat]['p01']
+                hi = ibm_stats[feat]['p99']
+                X_isw[:, j] = np.clip(X_isw[:, j], lo, hi)
+        print("  [Domain Adapt] Percentile-clipped ISW features to IBM [P1, P99] range.")
+    else:
+        print("  [Domain Adapt] ibm_feature_stats.pkl not found — run phase0 first for best results.")
+
     model  = model_bundle['model']
     scaler = model_bundle.get('scaler')
     if scaler is not None:
@@ -114,11 +136,33 @@ def main():
     else:
         ml_probs = model.predict(X_isw_sc).astype(float)
 
-    ml_preds = (ml_probs >= 0.5).astype(int)
+    # ── Threshold strategy for cross-domain inference ──────────
+    # The IBM model's raw probabilities are compressed into a very narrow
+    # range for ISW data (distribution shift). Two valid strategies:
+    #   1. Absolute: use optimal_threshold from IBM test (unreliable cross-domain)
+    #   2. Relative: flag top-K% by risk score, where K = IBM fraud rate
+    #      (the methodologically sound approach for zero-label domains)
+    # We apply RELATIVE as primary and normalise scores to [0,1] for display.
 
-    df_isw['ml_risk_score'] = ml_probs
+    _s3_cfg = cfg.get('three_stage_pipeline', {}).get('stage3_fieldtest', {})
+    ibm_fraud_rate = cfg.get('ibm_fraud_rate_estimate', 0.027)  # ~2.7% from rebalanced sample
+
+    # Relative threshold: flag top ibm_fraud_rate percentile
+    relative_thresh_pct = (1 - ibm_fraud_rate) * 100
+    relative_thresh = float(np.percentile(ml_probs, relative_thresh_pct))
+    print(f"  Relative threshold ({ibm_fraud_rate:.1%} -> P{relative_thresh_pct:.1f}): {relative_thresh:.6f}")
+
+    ml_preds = (ml_probs >= relative_thresh).astype(int)
+
+    # Normalise scores to [0,1] for dashboard risk gauge
+    score_min, score_max = ml_probs.min(), ml_probs.max()
+    ml_scores_norm = (ml_probs - score_min) / (score_max - score_min + 1e-12)
+
+    df_isw['ml_risk_score'] = ml_scores_norm   # normalised 0-1 for display
+    df_isw['ml_risk_raw']   = ml_probs          # raw probability preserved
     df_isw['ml_flagged']    = ml_preds
-    df_isw['inference_source'] = 'IBM_TRAINED_MODEL'
+    df_isw['alert_threshold'] = relative_thresh
+    df_isw['inference_source'] = 'IBM_TRAINED_MODEL (relative-threshold)'
 
     n_flagged = ml_preds.sum()
     print(f"  IBM model flagged: {n_flagged:,} / {len(df_isw):,} "
@@ -174,8 +218,9 @@ def main():
     isw_shap_dir = os.path.join(os.path.dirname(ibm_shap_dir), 'isw_shap')
     os.makedirs(isw_shap_dir, exist_ok=True)
 
-    # Score the high-risk subset for SHAP (faster)
-    high_risk_mask = ml_probs >= 0.3
+    # Use ml_preds (relative-threshold flags) for SHAP — NOT the absolute 0.3 cutoff
+    # which passes zero ISW rows and produces an all-zeros SHAP matrix.
+    high_risk_mask = ml_preds == 1
     X_shap = X_isw[high_risk_mask][:500]
     y_shap = ml_preds[high_risk_mask][:500]
 
@@ -188,9 +233,8 @@ def main():
             max_samples=min(500, len(X_shap)),
         )
     else:
-        print("  Not enough high-risk samples for SHAP. Using full test sample.")
+        print(f"  Not enough flagged samples for SHAP ({len(X_shap)} found). Falling back.")
         shap_vals = np.zeros((len(X_isw_sc[:50]), ibm_feat_count))
-        isw_shap_dir_shape = (50, ibm_feat_count)
 
     # ── Step 7: Compute Operational KPIs ─────────────────────
     print(f"\n[Stage 3] Step 7: Computing Operational KPIs...")
@@ -202,6 +246,7 @@ def main():
     kpi_report = build_operational_kpis(
         df=df_isw,
         ml_probs=ml_probs,
+        ml_threshold=relative_thresh,  # use the actual relative threshold, not 0.5
         model_bundle=model_bundle,
         X_sample=X_isw,
         shap_values=shap_vals_loaded,

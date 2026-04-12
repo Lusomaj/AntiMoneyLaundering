@@ -49,14 +49,27 @@ def apply_rules(df: pd.DataFrame, cfg: dict) -> pd.DataFrame:
         rule_flags:     JSON-like string listing which rules fired
     """
     rules = cfg['hard_rules']
-    threshold   = rules['amount_threshold_ugx']
+    threshold_ugx = rules['amount_threshold_ugx']           # UGX (Interswitch)
+    threshold_usd = rules.get('amount_threshold_usd', 5000)  # USD (IBM) — default ~18M UGX
     high_types  = [t.upper() for t in rules['high_risk_transaction_types']]
     vel_max     = rules['velocity_max_tx_per_hour']
     term_thresh = rules['terminal_high_tx_threshold']
 
     print("[RulesEngine] Applying hard rules...")
 
-    r1 = (df['amount'] >= threshold).astype(int)
+    # ── R1: Currency-aware amount threshold ──────────────────────────
+    # IBM amounts are in USD; Interswitch/MoMo amounts are in UGX.
+    # Applying a UGX threshold to USD amounts would flag every IBM transaction.
+    if 'currency' in df.columns:
+        is_usd = df['currency'].str.upper().isin(['USD', 'US DOLLAR']).fillna(False)
+        r1 = ((is_usd & (df['amount'] >= threshold_usd)) |
+              (~is_usd & (df['amount'] >= threshold_ugx))).astype(int)
+    elif 'dataset' in df.columns:
+        is_ibm = df['dataset'].str.upper().str.contains('IBM').fillna(False)
+        r1 = ((is_ibm & (df['amount'] >= threshold_usd)) |
+              (~is_ibm & (df['amount'] >= threshold_ugx))).astype(int)
+    else:
+        r1 = (df['amount'] >= threshold_ugx).astype(int)
     r2 = df['tran_type'].str.upper().isin(high_types).astype(int)
     r3 = df.get('motif_reversal', pd.Series(0, index=df.index)).astype(int)
     r4 = df.get('motif_smurfing', pd.Series(0, index=df.index)).astype(int)

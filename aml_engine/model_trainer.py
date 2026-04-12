@@ -33,12 +33,13 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier, StackingClassifier
 from sklearn.neural_network import MLPClassifier
 from sklearn.svm import SVC
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, StratifiedKFold, cross_val_score
 from sklearn.preprocessing import StandardScaler
-from sklearn.pipeline import Pipeline
+from sklearn.pipeline import Pipeline, make_pipeline
 from sklearn.metrics import (
     f1_score, roc_auc_score, precision_score, recall_score,
-    accuracy_score, average_precision_score, confusion_matrix, log_loss
+    accuracy_score, average_precision_score, confusion_matrix, log_loss,
+    precision_recall_curve
 )
 
 from xgboost import XGBClassifier
@@ -201,6 +202,20 @@ def train_all_models(df_features: pd.DataFrame, cfg: dict, output_dir: str) -> p
     else:
         X_tr_all_r, X_tr_raw_r, y_tr_r = X_tr_all, X_tr_raw, y_tr
 
+    # ── Save IBM feature percentile stats (for cross-domain normalisation) ──
+    ibm_stats = {}
+    for j, feat in enumerate(available_features):
+        col = X_all[:, j]
+        ibm_stats[feat] = {
+            'p01':  float(np.percentile(col, 1)),
+            'p99':  float(np.percentile(col, 99)),
+            'mean': float(col.mean()),
+            'std':  float(col.std() + 1e-9),
+        }
+    with open(os.path.join(output_dir, 'ibm_feature_stats.pkl'), 'wb') as _f:
+        pickle.dump(ibm_stats, _f)
+    print("[ModelTrainer] IBM feature stats saved for cross-domain adaptation.")
+
     # ── Scale inputs ─────────────────────────────────────
     scaler_all = StandardScaler()
     scaler_raw = StandardScaler()
@@ -246,18 +261,29 @@ def train_all_models(df_features: pd.DataFrame, cfg: dict, output_dir: str) -> p
     saved_models = {}
 
     print("\n[ModelTrainer] Training HYBRID (ML + SNA) models...")
+    _cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=random_state)
     for name, model in base_models_all.items():
-        print(f"  → {name}")
+        print(f"  -> {name}")
         try:
             model.fit(X_tr_all_sc, y_tr_r)
             probs = model.predict_proba(X_te_all_sc)[:, 1]
             preds = model.predict(X_te_all_sc)
             metrics = evaluate_model(y_te, preds, probs)
+            # 5-fold CV on full dataset via Pipeline (avoids leakage)
+            try:
+                _pipe = make_pipeline(StandardScaler(), type(model)(**model.get_params()))
+                _cv_scores = cross_val_score(_pipe, X_all, y, cv=_cv,
+                                             scoring='average_precision', n_jobs=-1)
+                metrics['CV_AUPRC_Mean'] = round(float(_cv_scores.mean()), 4)
+                metrics['CV_AUPRC_Std']  = round(float(_cv_scores.std()),  4)
+            except Exception as _ce:
+                metrics['CV_AUPRC_Mean'] = metrics['AUPRC']
+                metrics['CV_AUPRC_Std']  = 0.0
             metrics.update({'Model': name, 'Feature_Set': 'Hybrid (ML + SNA)', 'Tier': 'Standard'})
             results.append(metrics)
             saved_models[f"{name}_hybrid"] = {'model': model, 'scaler': scaler_all, 'features': 'all'}
         except Exception as e:
-            print(f"  ✗ {name} failed: {e}")
+            print(f"  x {name} failed: {e}")
 
     print("\n[ModelTrainer] Training STACKED ENSEMBLE (Hybrid)...")
     try:
@@ -265,11 +291,32 @@ def train_all_models(df_features: pd.DataFrame, cfg: dict, output_dir: str) -> p
         probs = stacked_model.predict_proba(X_te_all)[:, 1]
         preds = stacked_model.predict(X_te_all)
         metrics = evaluate_model(y_te, preds, probs)
-        metrics.update({'Model': 'Stacked Ensemble (RF+XGB)', 'Feature_Set': 'Hybrid (ML + SNA)', 'Tier': 'Ensemble'})
+        try:
+            _pipe_s = make_pipeline(StandardScaler(), StackingClassifier(
+                estimators=[('rf', RandomForestClassifier(n_estimators=50, random_state=random_state, class_weight='balanced')),
+                             ('xgb', XGBClassifier(n_estimators=50, eval_metric='logloss', random_state=random_state))],
+                final_estimator=LogisticRegression(max_iter=300), cv=3))
+            _cv_scores_s = cross_val_score(_pipe_s, X_all, y, cv=_cv,
+                                           scoring='average_precision', n_jobs=-1)
+            metrics['CV_AUPRC_Mean'] = round(float(_cv_scores_s.mean()), 4)
+            metrics['CV_AUPRC_Std']  = round(float(_cv_scores_s.std()),  4)
+        except Exception:
+            metrics['CV_AUPRC_Mean'] = metrics['AUPRC']
+            metrics['CV_AUPRC_Std']  = 0.0
+        # Find F1-optimal threshold for cross-domain scoring
+        _prec, _rec, _thr = precision_recall_curve(y_te, probs)
+        _f1s = 2 * _prec * _rec / (_prec + _rec + 1e-9)
+        _best_thr = float(_thr[np.argmax(_f1s[:-1])]) if len(_thr) > 0 else 0.5
+        metrics.update({'Model': 'Stacked Ensemble (RF+XGB)', 'Feature_Set': 'Hybrid (ML + SNA)',
+                        'Tier': 'Ensemble'})
         results.append(metrics)
-        saved_models['stacked_hybrid'] = {'model': stacked_model, 'scaler': scaler_all, 'features': 'all'}
+        saved_models['stacked_hybrid'] = {
+            'model': stacked_model, 'scaler': scaler_all, 'features': 'all',
+            'optimal_threshold': _best_thr,
+        }
+        print(f"  Stacked Ensemble optimal threshold: {_best_thr:.3f}")
     except Exception as e:
-        print(f"  ✗ Stacked Ensemble failed: {e}")
+        print(f"  x Stacked Ensemble failed: {e}")
 
     print("\n[ModelTrainer] Training RAW (ML-only, no SNA) models for ablation...")
     for name, model in {
@@ -278,16 +325,25 @@ def train_all_models(df_features: pd.DataFrame, cfg: dict, output_dir: str) -> p
         'XGBoost':           XGBClassifier(n_estimators=100, scale_pos_weight=scale_pos,
                                             eval_metric='logloss', random_state=random_state),
     }.items():
-        print(f"  → {name}")
+        print(f"  -> {name}")
         try:
             model.fit(X_tr_raw_sc, y_tr_r)
             probs = model.predict_proba(X_te_raw_sc)[:, 1]
             preds = model.predict(X_te_raw_sc)
             metrics = evaluate_model(y_te, preds, probs)
+            try:
+                _pipe_r = make_pipeline(StandardScaler(), type(model)(**model.get_params()))
+                _cv_r = cross_val_score(_pipe_r, X_raw, y, cv=_cv,
+                                        scoring='average_precision', n_jobs=-1)
+                metrics['CV_AUPRC_Mean'] = round(float(_cv_r.mean()), 4)
+                metrics['CV_AUPRC_Std']  = round(float(_cv_r.std()),  4)
+            except Exception:
+                metrics['CV_AUPRC_Mean'] = metrics['AUPRC']
+                metrics['CV_AUPRC_Std']  = 0.0
             metrics.update({'Model': name, 'Feature_Set': 'Raw ML Only', 'Tier': 'Ablation'})
             results.append(metrics)
         except Exception as e:
-            print(f"  ✗ {name} (raw) failed: {e}")
+            print(f"  x {name} (raw) failed: {e}")
 
     # Rules-only baseline (rule_triggered as classifier)
     if 'rule_triggered' in df_features.columns:
