@@ -1,5 +1,5 @@
 """
-Anti-Gravity AML — Rules Engine
+XAI-SNA AML — Rules Engine
 Executes the "Hard Rules" compliance layer (Layer 1 of the Tri-Layer Defense).
 Reads configuration from aml_config.yaml — no code changes needed to update rules.
 
@@ -57,19 +57,12 @@ def apply_rules(df: pd.DataFrame, cfg: dict) -> pd.DataFrame:
 
     print("[RulesEngine] Applying hard rules...")
 
-    # ── R1: Currency-aware amount threshold ──────────────────────────
-    # IBM amounts are in USD; Interswitch/MoMo amounts are in UGX.
-    # Applying a UGX threshold to USD amounts would flag every IBM transaction.
-    if 'currency' in df.columns:
-        is_usd = df['currency'].str.upper().isin(['USD', 'US DOLLAR']).fillna(False)
-        r1 = ((is_usd & (df['amount'] >= threshold_usd)) |
-              (~is_usd & (df['amount'] >= threshold_ugx))).astype(int)
-    elif 'dataset' in df.columns:
-        is_ibm = df['dataset'].str.upper().str.contains('IBM').fillna(False)
-        r1 = ((is_ibm & (df['amount'] >= threshold_usd)) |
-              (~is_ibm & (df['amount'] >= threshold_ugx))).astype(int)
-    else:
-        r1 = (df['amount'] >= threshold_ugx).astype(int)
+    # ── R1: Amount threshold (all amounts now normalised to UGX) ────
+    # IBM amounts are converted to UGX in ibm_loader.py before reaching here.
+    # Interswitch amounts are natively in UGX.
+    # Both datasets now use the same UGX threshold — no currency branching needed.
+    # This is the key benefit of the USD→UGX normalisation step.
+    r1 = (df['amount'] >= threshold_ugx).astype(int)
     r2 = df['tran_type'].str.upper().isin(high_types).astype(int)
     r3 = df.get('motif_reversal', pd.Series(0, index=df.index)).astype(int)
     r4 = df.get('motif_smurfing', pd.Series(0, index=df.index)).astype(int)
@@ -140,3 +133,4 @@ def evaluate_single_transaction(tx: dict, cfg: dict) -> dict:
     results['rule_flags']     = {k: RULE_LABELS[k] for k in RULE_LABELS if results.get(k, 0) == 1}
 
     return results
+

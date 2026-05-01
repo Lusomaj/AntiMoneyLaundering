@@ -1,5 +1,5 @@
 """
-Anti-Gravity AML — Feature Engineer
+XAI-SNA AML — Feature Engineer
 Combines three categories of features for every transaction:
   1. Tabular (raw transaction attributes)
   2. SNA (graph-derived: degree, betweenness, PageRank, community)
@@ -167,3 +167,4 @@ def engineer_all_features(df: pd.DataFrame, sna_features: Dict, cfg: dict) -> pd
     print(f"[FeatureEngineer] Feature engineering complete. "
           f"Feature columns: {len(ALL_FEATURES)} | Rows: {len(df):,}")
     return df
+

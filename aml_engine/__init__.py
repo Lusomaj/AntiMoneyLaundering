@@ -1,3 +1,4 @@
-# Anti-Gravity AML Engine Package
+# XAI-SNA AML Engine Package
 __version__ = "2.0.0"
 __author__ = "Joseph Lusoma"
+

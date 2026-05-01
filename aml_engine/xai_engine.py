@@ -1,11 +1,10 @@
 """
-Anti-Gravity AML — XAI Engine
+XAI-SNA AML — XAI Engine (Enhanced)
 Computes and persists SHAP (SHapley Additive Explanations) values for the best model.
 
-Exposes:
-  - Global feature importance bar chart data
-  - Per-transaction Force Plot vectors (for UI hover)
-  - Waterfall chart data for single-transaction explanation
+Enhancements over v1:
+  - Serializes the SHAP explainer for live per-transaction scoring (fixes population-mean bug)
+  - Calibration curve (Reliability Diagram) computation and persistence
   - Plain-English "Why Flagged" narrative generator
 """
 
@@ -59,7 +58,7 @@ def compute_shap_values(model_bundle: dict, X_test: np.ndarray,
                          feature_names: list, output_dir: str, max_samples: int = 500):
     """
     Compute SHAP values for the best model. Supports tree-based and linear models.
-    Saves values and figures to output_dir.
+    Saves values, figures, the serialized explainer, and calibration data to output_dir.
     """
     os.makedirs(output_dir, exist_ok=True)
     model   = model_bundle['model']
@@ -107,6 +106,18 @@ def compute_shap_values(model_bundle: dict, X_test: np.ndarray,
     np.save(ev_path, np.array([expected_value]))
     print(f"[XAI] SHAP values saved → {shap_path}")
 
+    # ── Serialize the explainer for live per-transaction scoring ──────
+    # FIX: Previously explain_single_transaction() used population means.
+    # Now we save the explainer so the dashboard can run it on any single tx.
+    try:
+        explainer_path = os.path.join(output_dir, 'shap_explainer.pkl')
+        with open(explainer_path, 'wb') as _ef:
+            pickle.dump({'explainer': explainer, 'explainer_type': explainer_type,
+                         'expected_value': expected_value}, _ef)
+        print(f"[XAI] SHAP explainer serialized → {explainer_path}")
+    except Exception as e:
+        print(f"[XAI] WARNING: Could not serialize explainer ({e}). Live SHAP will use mean fallback.")
+
     # ── Global Feature Importance ─────────────────────────
     mean_abs_shap = np.abs(shap_vals_pos).mean(axis=0)
     importance_df = pd.DataFrame({
@@ -130,6 +141,35 @@ def compute_shap_values(model_bundle: dict, X_test: np.ndarray,
     import json
     with open(os.path.join(output_dir, 'force_plot_data.json'), 'w') as fp:
         json.dump(force_data, fp)
+
+    # ── Calibration Curve (Reliability Diagram) ───────────
+    # This proves model probability scores are meaningful (not just ordinal ranks)
+    if hasattr(model, 'predict_proba'):
+        try:
+            from sklearn.calibration import calibration_curve
+            probs_cal = model.predict_proba(X_sc)[:, 1]
+            y_dummy   = (probs_cal >= 0.5).astype(int)  # proxy labels from high-confidence predictions
+
+            # Check if we have test labels available
+            y_test_path = os.path.join(os.path.dirname(output_dir), 'models', 'y_test.npy')
+            if os.path.exists(y_test_path):
+                y_cal = np.load(y_test_path)[:max_samples]
+                if len(y_cal) == len(probs_cal) and y_cal.sum() > 5:
+                    n_bins = 8
+                    fraction_of_positives, mean_predicted = calibration_curve(
+                        y_cal, probs_cal, n_bins=n_bins, strategy='quantile'
+                    )
+                    cal_data = {
+                        'mean_predicted_value': mean_predicted.tolist(),
+                        'fraction_of_positives': fraction_of_positives.tolist(),
+                        'source': 'y_test labels',
+                        'brier_score': round(float(np.mean((probs_cal - y_cal) ** 2)), 4),
+                    }
+                    with open(os.path.join(output_dir, 'calibration_data.json'), 'w') as cf:
+                        json.dump(cal_data, cf)
+                    print(f"[XAI] Calibration curve saved (Brier score: {cal_data['brier_score']:.4f}).")
+        except Exception as e:
+            print(f"[XAI] Calibration curve error: {e}")
 
     # ── Save waterfall figure for best worst-case alert ───
     try:
@@ -157,21 +197,63 @@ def compute_shap_values(model_bundle: dict, X_test: np.ndarray,
     return shap_vals_pos, expected_value, importance_df
 
 
-def explain_single_transaction(tx_values: np.ndarray, feature_names: list,
-                                shap_dir: str) -> dict:
+def explain_single_transaction(tx_features: np.ndarray, feature_names: list,
+                                shap_dir: str, model_bundle: dict = None) -> dict:
     """
-    Load precomputed SHAP data and compute explanation for a single transaction.
-    Returns dict with SHAP contribution per feature + plain-English narrative.
+    Compute SHAP explanation for a SINGLE transaction.
+
+    FIXED: Previously used population mean SHAP values (incorrect for live scoring).
+    Now uses the serialized TreeExplainer for per-transaction attribution.
+    Falls back to mean-based approximation if explainer is not available.
+
+    Args:
+        tx_features: 1D numpy array of feature values (same order as feature_names)
+        feature_names: list of feature names
+        shap_dir: directory containing shap_explainer.pkl
+        model_bundle: optional model bundle for fallback
+
+    Returns:
+        dict with per-feature SHAP contributions + plain-English narrative
     """
-    shap_vals = np.load(os.path.join(shap_dir, 'shap_values.npy'))
-    ev        = np.load(os.path.join(shap_dir, 'expected_value.npy'))[0]
+    # Try to load serialized explainer (live/per-transaction scoring)
+    explainer_path = os.path.join(shap_dir, 'shap_explainer.pkl')
+    live_shap_available = False
+    contribs = {}
+    expected_value = 0.0
 
-    # Use mean SHAP as proxy for fresh transaction (no live computation in dashboard)
-    # In production: run the explainer on the live transaction
-    mean_contributions = np.abs(shap_vals).mean(axis=0)
-    signed_contributions = shap_vals.mean(axis=0)
+    if os.path.exists(explainer_path):
+        try:
+            with open(explainer_path, 'rb') as ef:
+                exp_bundle = pickle.load(ef)
+            explainer    = exp_bundle['explainer']
+            expected_value = float(exp_bundle.get('expected_value', 0.0))
+            explainer_type = exp_bundle.get('explainer_type', 'Unknown')
 
-    contribs = dict(zip(feature_names, signed_contributions))
+            tx_2d = tx_features.reshape(1, -1)
+
+            if explainer_type == 'TreeExplainer':
+                sv = explainer.shap_values(tx_2d)
+                sv_row = (sv[1][0] if isinstance(sv, list) else sv[0])
+            else:
+                sv_row = explainer.shap_values(tx_2d, nsamples=100)
+                if isinstance(sv_row, np.ndarray) and sv_row.ndim > 1:
+                    sv_row = sv_row[0]
+
+            contribs = dict(zip(feature_names, sv_row.tolist()))
+            live_shap_available = True
+            print(f"[XAI] Live per-transaction SHAP computed ({explainer_type}).")
+        except Exception as e:
+            print(f"[XAI] Live SHAP failed ({e}). Using population-mean fallback.")
+
+    # Fallback: use population mean SHAP (approximate)
+    if not live_shap_available:
+        shap_vals_path = os.path.join(shap_dir, 'shap_values.npy')
+        ev_path        = os.path.join(shap_dir, 'expected_value.npy')
+        if os.path.exists(shap_vals_path):
+            shap_vals  = np.load(shap_vals_path)
+            expected_value = float(np.load(ev_path)[0]) if os.path.exists(ev_path) else 0.0
+            signed_contributions = shap_vals.mean(axis=0)
+            contribs = dict(zip(feature_names, signed_contributions))
 
     # Build narrative
     top_positive = sorted(contribs.items(), key=lambda x: x[1], reverse=True)[:3]
@@ -185,12 +267,15 @@ def explain_single_transaction(tx_values: np.ndarray, feature_names: list,
 
     narrative = ("This transaction was flagged because: " +
                  "; ".join(narrative_parts) + ".")
+    if not live_shap_available:
+        narrative += " *(Note: using population-mean SHAP approximation — run pipeline for exact values)*"
 
     return {
-        'contributions':       contribs,
-        'expected_value':      ev,
-        'narrative':           narrative,
+        'contributions':        contribs,
+        'expected_value':       expected_value,
+        'narrative':            narrative,
         'feature_descriptions': FEATURE_DESCRIPTIONS,
+        'is_live_shap':         live_shap_available,
     }
 
 
@@ -199,3 +284,16 @@ def load_feature_importance(shap_dir: str) -> pd.DataFrame:
     if os.path.exists(path):
         return pd.read_csv(path)
     return pd.DataFrame()
+
+
+def load_calibration_data(shap_dir: str) -> dict:
+    """Load calibration curve data if available."""
+    path = os.path.join(shap_dir, 'calibration_data.json')
+    if os.path.exists(path):
+        with open(path, encoding='utf-8') as f:
+            return json.load(f)
+    return {}
+
+
+import json  # ensure json is available at module level
+

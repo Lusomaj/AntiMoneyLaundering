@@ -1,5 +1,5 @@
 """
-Anti-Gravity AML — Model Trainer
+XAI-SNA AML — Model Trainer
 Trains the full multi-model suite:
 
   Tier 1 (Baseline):
@@ -154,9 +154,87 @@ def evaluate_model(y_true, y_pred, y_prob) -> dict:
 # Main training pipeline
 # ─────────────────────────────────────────────────────────
 
+def _temporal_split(X: np.ndarray, y: np.ndarray, df: pd.DataFrame,
+                    test_frac: float = 0.20):
+    """
+    Temporal holdout split: train on earlier steps, test on later steps.
+    This avoids data leakage from SNA features computed on the full graph.
+    Uses 'step' column if available, else falls back to index ordering.
+    """
+    if 'step' in df.columns:
+        sorted_idx = df['step'].argsort().values
+    else:
+        sorted_idx = np.arange(len(df))
+    split_point = int(len(sorted_idx) * (1 - test_frac))
+    train_idx   = sorted_idx[:split_point]
+    test_idx    = sorted_idx[split_point:]
+    return X[train_idx], X[test_idx], y[train_idx], y[test_idx]
+
+
+def _granular_sna_ablation(df_features: pd.DataFrame, y: np.ndarray,
+                             available_features: list, cfg: dict,
+                             random_state: int, output_dir: str) -> pd.DataFrame:
+    """
+    Granular SNA ablation: remove one SNA feature group at a time and measure AUPRC drop.
+    Answers: which graph property contributes MOST to AML detection?
+    """
+    print("\n[ModelTrainer] Running granular SNA ablation study...")
+
+    ABLATION_GROUPS = {
+        'No PageRank':    ['source_pagerank', 'target_pagerank', 'terminal_pagerank'],
+        'No Betweenness': ['source_betweenness', 'target_betweenness'],
+        'No Community':   ['community_id', 'community_size', 'is_cross_community'],
+        'No Motifs':      ['motif_circular', 'motif_smurfing', 'motif_reversal'],
+        'No SNA (All)':   SNA_FEATURES,
+    }
+
+    ablation_results = []
+
+    for group_name, feats_to_drop in ABLATION_GROUPS.items():
+        remaining = [f for f in available_features if f not in feats_to_drop]
+        if not remaining:
+            continue
+        X_abl = df_features[remaining].fillna(0).values
+        X_tr_a, X_te_a, y_tr_a, y_te_a = train_test_split(
+            X_abl, y, test_size=0.20, random_state=random_state, stratify=y)
+        try:
+            from sklearn.preprocessing import StandardScaler
+            from xgboost import XGBClassifier
+            scale_pos = max(1, int((y_tr_a == 0).sum() / max(y_tr_a.sum(), 1)))
+            sc = StandardScaler()
+            X_tr_sc = sc.fit_transform(X_tr_a)
+            X_te_sc = sc.transform(X_te_a)
+            m = XGBClassifier(n_estimators=100, scale_pos_weight=scale_pos,
+                              eval_metric='logloss', random_state=random_state,
+                              n_jobs=-1, verbosity=0)
+            m.fit(X_tr_sc, y_tr_a)
+            probs = m.predict_proba(X_te_sc)[:, 1]
+            from sklearn.metrics import average_precision_score
+            auprc = round(float(average_precision_score(y_te_a, probs)), 4)
+        except Exception as e:
+            print(f"  [Ablation] {group_name} failed: {e}")
+            auprc = None
+        ablation_results.append({
+            'Ablation':          group_name,
+            'Features_Used':     len(remaining),
+            'Features_Dropped':  len(feats_to_drop),
+            'AUPRC':             auprc,
+        })
+        print(f"  [Ablation] {group_name:<20} → AUPRC={auprc}  ({len(remaining)} features)")
+
+    df_abl = pd.DataFrame(ablation_results)
+    abl_path = os.path.join(output_dir, 'sna_ablation_results.csv')
+    df_abl.to_csv(abl_path, index=False)
+    print(f"[ModelTrainer] Granular SNA ablation saved → {abl_path}")
+    return df_abl
+
+
 def train_all_models(df_features: pd.DataFrame, cfg: dict, output_dir: str) -> pd.DataFrame:
     """
-    Full multi-model training pipeline.
+    Full multi-model training pipeline with:
+    - Temporal holdout validation (in addition to random split)
+    - F1-optimal threshold saved per model
+    - Granular SNA ablation study
     Returns comparison DataFrame of all models across both feature sets.
     """
     os.makedirs(output_dir, exist_ok=True)
@@ -177,6 +255,21 @@ def train_all_models(df_features: pd.DataFrame, cfg: dict, output_dir: str) -> p
           f"Suspicious: {y.sum():,} ({100*y.mean():.2f}%) | "
           f"Features (hybrid): {len(available_features)} | Features (raw): {len(raw_features_avail)}")
 
+    # ── Temporal holdout split (closes data leakage critique) ────────
+    print("[ModelTrainer] Performing temporal holdout split (train on early steps, test on late steps)...")
+    X_tr_all_tmp, X_te_all_tmp, y_tr_tmp, y_te_tmp = _temporal_split(
+        X_all, y, df_features, test_frac=test_size)
+    temporal_split_info = {
+        'train_size': len(y_tr_tmp), 'test_size': len(y_te_tmp),
+        'train_fraud': int(y_tr_tmp.sum()), 'test_fraud': int(y_te_tmp.sum()),
+    }
+    print(f"  Temporal split → Train: {len(y_tr_tmp):,} ({y_tr_tmp.sum():,} fraud) | "
+          f"Test: {len(y_te_tmp):,} ({y_te_tmp.sum():,} fraud)")
+    with open(os.path.join(output_dir, 'temporal_split_info.json'), 'w') as _tf:
+        import json
+        json.dump(temporal_split_info, _tf)
+
+    # ── Random split (kept for comparison with temporal) ─────────────
     X_tr_all, X_te_all, y_tr, y_te = train_test_split(
         X_all, y, test_size=test_size, random_state=random_state, stratify=y)
     X_tr_raw, X_te_raw, _, _ = train_test_split(
@@ -279,9 +372,17 @@ def train_all_models(df_features: pd.DataFrame, cfg: dict, output_dir: str) -> p
             except Exception as _ce:
                 metrics['CV_AUPRC_Mean'] = metrics['AUPRC']
                 metrics['CV_AUPRC_Std']  = 0.0
+            # F1-optimal threshold per model (fixes hardcoded 0.5 in scorer)
+            _prec_m, _rec_m, _thr_m = precision_recall_curve(y_te, probs)
+            _f1s_m  = 2 * _prec_m * _rec_m / (_prec_m + _rec_m + 1e-9)
+            _opt_thr = float(_thr_m[np.argmax(_f1s_m[:-1])]) if len(_thr_m) > 0 else 0.5
+            metrics['Optimal_Threshold'] = round(_opt_thr, 4)
             metrics.update({'Model': name, 'Feature_Set': 'Hybrid (ML + SNA)', 'Tier': 'Standard'})
             results.append(metrics)
-            saved_models[f"{name}_hybrid"] = {'model': model, 'scaler': scaler_all, 'features': 'all'}
+            saved_models[f"{name}_hybrid"] = {
+                'model': model, 'scaler': scaler_all, 'features': 'all',
+                'optimal_threshold': _opt_thr,
+            }
         except Exception as e:
             print(f"  x {name} failed: {e}")
 
@@ -307,6 +408,22 @@ def train_all_models(df_features: pd.DataFrame, cfg: dict, output_dir: str) -> p
         _prec, _rec, _thr = precision_recall_curve(y_te, probs)
         _f1s = 2 * _prec * _rec / (_prec + _rec + 1e-9)
         _best_thr = float(_thr[np.argmax(_f1s[:-1])]) if len(_thr) > 0 else 0.5
+        # Also evaluate on temporal holdout for comparison
+        try:
+            sc_tmp = StandardScaler().fit(X_tr_all_tmp)
+            stk_tmp = type(stacked_model)(
+                estimators=[('rf', RandomForestClassifier(n_estimators=50, random_state=random_state, class_weight='balanced')),
+                            ('xgb', XGBClassifier(n_estimators=50, eval_metric='logloss', random_state=random_state))],
+                final_estimator=LogisticRegression(max_iter=300), cv=3)
+            stk_tmp.fit(X_tr_all_tmp, y_tr_tmp)
+            probs_tmp = stk_tmp.predict_proba(X_te_all_tmp)[:, 1]
+            from sklearn.metrics import average_precision_score as _aps
+            auprc_temporal = round(float(_aps(y_te_tmp, probs_tmp)), 4) if y_te_tmp.sum() > 0 else 0.0
+            metrics['Temporal_AUPRC'] = auprc_temporal
+            print(f"  Stacked Ensemble TEMPORAL holdout AUPRC: {auprc_temporal:.4f}")
+        except Exception as _te:
+            print(f"  [TemporalHoldout] Stacked eval failed: {_te}")
+            metrics['Temporal_AUPRC'] = None
         metrics.update({'Model': 'Stacked Ensemble (RF+XGB)', 'Feature_Set': 'Hybrid (ML + SNA)',
                         'Tier': 'Ensemble'})
         results.append(metrics)
@@ -314,7 +431,7 @@ def train_all_models(df_features: pd.DataFrame, cfg: dict, output_dir: str) -> p
             'model': stacked_model, 'scaler': scaler_all, 'features': 'all',
             'optimal_threshold': _best_thr,
         }
-        print(f"  Stacked Ensemble optimal threshold: {_best_thr:.3f}")
+        print(f"  Stacked Ensemble F1-optimal threshold: {_best_thr:.3f}")
     except Exception as e:
         print(f"  x Stacked Ensemble failed: {e}")
 
@@ -365,33 +482,47 @@ def train_all_models(df_features: pd.DataFrame, cfg: dict, output_dir: str) -> p
         results.append(metrics)
         saved_models['gat_hybrid'] = {'model': gat_result['model_obj'], 'scaler': scaler_all, 'features': 'all'}
 
+    # ── Granular SNA Ablation Study ───────────────────────
+    if y.sum() >= 10:  # only run ablation if enough fraud samples
+        try:
+            _granular_sna_ablation(df_features, y, available_features, cfg,
+                                    random_state, output_dir)
+        except Exception as _ae:
+            print(f"[ModelTrainer] Granular ablation failed: {_ae}")
+
     # ── Save everything ───────────────────────────────────
     df_results = pd.DataFrame(results)
     df_results.to_csv(os.path.join(output_dir, 'model_comparison.csv'), index=False)
 
-    # Save best hybrid model (by AUPRC)
-    hybrid_df = df_results[df_results['Feature_Set'] == 'Hybrid (ML + SNA)']
+    # Save best hybrid model (by AUPRC) — includes optimal_threshold
+    hybrid_df = df_results[df_results['Feature_Set'].str.contains('Hybrid', na=False)]
     if not hybrid_df.empty:
         best_name = hybrid_df.loc[hybrid_df['AUPRC'].idxmax(), 'Model']
-        best_key  = f"{best_name}_hybrid".replace(' ', '_').replace('(', '').replace(')', '').replace('+', '')
-        best_key  = list(saved_models.keys())[0]  # fallback to first available
+        best_key  = list(saved_models.keys())[0]  # fallback
         for k in saved_models:
             if best_name.lower().split()[0] in k.lower():
                 best_key = k
                 break
         with open(os.path.join(output_dir, 'best_model.pkl'), 'wb') as f:
             pickle.dump(saved_models[best_key], f)
-        print(f"\n[ModelTrainer] ✅ Best model: '{best_name}' saved.")
+        opt_thr = saved_models[best_key].get('optimal_threshold', 0.5)
+        print(f"\n[ModelTrainer] Best model: '{best_name}' | F1-optimal threshold: {opt_thr:.4f}")
 
     # Save feature names
     with open(os.path.join(output_dir, 'feature_names.pkl'), 'wb') as f:
         pickle.dump({'all': available_features, 'raw': raw_features_avail}, f)
 
-    # Save test set for XAI
+    # Save test set for XAI and calibration
     np.save(os.path.join(output_dir, 'X_test_all.npy'), X_te_all)
     np.save(os.path.join(output_dir, 'y_test.npy'), y_te)
 
     print(f"\n[ModelTrainer] Results saved → {output_dir}")
-    print("\n" + df_results[['Model', 'Feature_Set', 'AUPRC', 'F1', 'ROC_AUC', 'Precision', 'Recall']].to_string(index=False))
+    display_cols = ['Model', 'Feature_Set', 'AUPRC', 'F1', 'ROC_AUC', 'Precision', 'Recall']
+    if 'Optimal_Threshold' in df_results.columns:
+        display_cols.append('Optimal_Threshold')
+    if 'Temporal_AUPRC' in df_results.columns:
+        display_cols.append('Temporal_AUPRC')
+    print("\n" + df_results[[c for c in display_cols if c in df_results.columns]].to_string(index=False))
 
     return df_results
+

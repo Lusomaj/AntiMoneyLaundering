@@ -1,5 +1,5 @@
 """
-Anti-Gravity AML — Data Loader
+XAI-SNA AML — Data Loader
 Handles:
   1. Ingestion of CARD_TRANSACTIONS_DATASET (Interswitch ATM) and MoMTSim (Mobile Money)
   2. Super-Node fusion: encryptedCard + from_account_id → super_node_id
@@ -164,3 +164,4 @@ def load_and_merge(atm_path: str, momo_path: str, cfg: dict) -> pd.DataFrame:
     # Sort by step/timestamp for temporal features
     merged = merged.sort_values('step').reset_index(drop=True)
     return merged
+

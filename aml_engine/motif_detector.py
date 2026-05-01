@@ -1,5 +1,5 @@
 """
-Anti-Gravity AML — Motif Detector
+XAI-SNA AML — Motif Detector
 Detects three canonical money laundering motifs in the transaction graph:
 
   1. CIRCULAR FLOW  : A → B → C → ... → A  (cyclic layering)
@@ -179,3 +179,4 @@ def apply_motif_features(df: pd.DataFrame, G: nx.DiGraph, cfg: dict) -> pd.DataF
         'smurfing_nodes': list(smurfing_sources)[:200],
         'reversal_nodes': list(reversal_nodes)[:200],
     }
+
