@@ -1,5 +1,5 @@
 """
-Anti-Gravity AML — Phase 3: Explainability (SHAP)
+XAI-SNA AML — Phase 3: Explainability (SHAP)
 Orchestrates: Load best model → Compute SHAP values → Save charts & JSON
 Run this AFTER phase2_model_training.py completes.
 """
@@ -17,7 +17,7 @@ CONFIG_PATH = r'E:\MASTERSProject\AMLProject\aml_config.yaml'
 
 def main():
     print("=" * 70)
-    print("  ANTI-GRAVITY AML SYSTEM — Phase 3: Explainability (XAI / SHAP)")
+    print("  XAI-SNA AML System — Phase 3: Explainability (XAI / SHAP)")
     print("=" * 70)
 
     cfg = load_config()
@@ -69,3 +69,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

@@ -1,4 +1,4 @@
-# Anti-Gravity AML System — Docker Compose
+# XAI-SNA AML System — Docker Compose
 # Run: docker-compose up --build
 
 version: "3.9"
@@ -33,3 +33,4 @@ services:
 networks:
   default:
     name: aml_network
+

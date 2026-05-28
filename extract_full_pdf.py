@@ -22,3 +22,4 @@ if __name__ == "__main__":
         with open("proposal_text.txt", "w", encoding="utf-8") as f:
             f.write(full_text)
         print("Text extracted and saved to proposal_text.txt")
+

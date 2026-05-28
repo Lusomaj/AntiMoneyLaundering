@@ -123,3 +123,4 @@ else:
                 st.success("✅ NORMAL: No immediate AML risk detected.")
         
         st.info("Top reasons from SHAP: Historical Amount Profile (amount_vs_hist_mean), Network Centrality, High Step Frequency, Temporal Velocity")
+

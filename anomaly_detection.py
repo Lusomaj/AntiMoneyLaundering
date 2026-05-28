@@ -65,3 +65,4 @@ def run_anomaly_detection():
 
 if __name__ == "__main__":
     run_anomaly_detection()
+

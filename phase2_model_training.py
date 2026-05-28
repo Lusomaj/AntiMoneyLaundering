@@ -1,5 +1,5 @@
 """
-Anti-Gravity AML — Phase 2: Model Training
+XAI-SNA AML — Phase 2: Model Training
 Orchestrates: Load features → Train all tiers → Save models & comparison table
 Run this AFTER phase1_data_prep.py completes.
 """
@@ -19,7 +19,7 @@ CONFIG_PATH = r'E:\MASTERSProject\AMLProject\aml_config.yaml'
 
 def main():
     print("=" * 70)
-    print("  ANTI-GRAVITY AML SYSTEM — Phase 2: Model Training")
+    print("  XAI-SNA AML System — Phase 2: Model Training")
     print("=" * 70)
 
     cfg = load_config()
@@ -57,3 +57,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

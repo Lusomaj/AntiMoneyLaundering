@@ -202,4 +202,5 @@ Interswitch Uganda data used under research agreement.
 
 ---
 
-*© 2025 Joseph Lusoma | Makerere University | Anti-Gravity AML System v3.0*
+*© 2025 Joseph Lusoma | Makerere University | XAI-SNA AML System v3.0*
+

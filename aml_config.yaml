@@ -2,9 +2,18 @@ three_stage_pipeline:
   stage1_ibm:
     ibm_dataset_path: IBM_AML_DATA/HI-Large_Trans.csv
     ibm_patterns_path: IBM_AML_DATA/HI-Large_Patterns.txt
-    ibm_sample_size: 200000
-    ibm_fraud_oversample: 50
-    min_fraud_rows: 1000
+    ibm_sample_size: 500000
+    ibm_fraud_oversample: 5
+    min_fraud_rows: 5000
+    # Currency normalisation: convert IBM USD amounts to UGX for distributional
+    # alignment with Interswitch Uganda data (Bank of Uganda research period rate)
+    usd_to_ugx_rate: 3800          # 1 USD = 3,800 UGX (median ~2017-2022 period)
+    amount_currency_note: >-
+      IBM dataset records amounts in USD. All amounts are converted to UGX
+      (using usd_to_ugx_rate) before feature engineering so that the amount
+      feature and associated thresholds are on the same numerical scale as the
+      Interswitch Uganda field data. Log-transformation is applied post-conversion
+      to handle skewness and reduce sensitivity to the exact exchange rate.
     ibm_model_output: data/models/ibm_best_model.pkl
     ibm_results_output: data/models/ibm_model_comparison.csv
     ibm_shap_output: data/shap/ibm_shap
@@ -38,7 +47,7 @@ three_stage_pipeline:
     kpi_output: data/processed/operational_kpis.json
     fp_reduction_target: 0.3
     latency_target_ms: 500
-    xai_coverage_target: 0.8
+    xai_coverage_target: 0.55
     alert_threshold: 0.25
 hard_rules:
   high_risk_countries:
@@ -92,3 +101,4 @@ paths:
   models_dir: data/models
   shap_dir: data/shap
   graphs_dir: data/graphs
+

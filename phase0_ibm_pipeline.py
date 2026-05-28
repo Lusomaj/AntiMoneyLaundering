@@ -1,5 +1,5 @@
 """
-Anti-Gravity AML — Phase 0: IBM Gold Standard Training (Stage 1)
+XAI-SNA AML — Phase 0: IBM Gold Standard Training (Stage 1)
 Orchestrates the full IBM AML pipeline:
   1. Ingest IBM HI-Large dataset (stratified sample from 5GB)
   2. Parse IBM Patterns file (STACK / CYCLE / FAN-IN / FAN-OUT blocks)
@@ -40,7 +40,7 @@ CONFIG_PATH = os.path.join(ROOT, 'aml_config.yaml')
 
 def main():
     print("=" * 70)
-    print("  ANTI-GRAVITY AML — Stage 1: IBM Gold Standard Training")
+    print("  XAI-SNA AML — Stage 1: IBM Gold Standard Training")
     print("  Dataset: IBM HI-Large AML (labeled, global patterns)")
     print("=" * 70)
 
@@ -185,3 +185,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

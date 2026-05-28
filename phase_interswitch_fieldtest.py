@@ -1,5 +1,5 @@
 """
-Anti-Gravity AML — Interswitch Field Test (Stage 3)
+XAI-SNA AML — Interswitch Field Test (Stage 3)
 Applies the IBM-trained model to the unlabeled Interswitch dataset.
 Reports OPERATIONAL KPIs (not accuracy metrics since there are no labels).
 
@@ -41,7 +41,7 @@ CONFIG_PATH = os.path.join(ROOT, 'aml_config.yaml')
 
 def main():
     print("=" * 70)
-    print("  ANTI-GRAVITY AML — Stage 3: Interswitch Field Test")
+    print("  XAI-SNA AML — Stage 3: Interswitch Field Test")
     print("  Dataset: Interswitch ATM + Agent (Uganda) — unlabeled")
     print("  KPIs: FP Reduction | Latency | Explainability (NOT Accuracy)")
     print("=" * 70)
@@ -276,3 +276,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

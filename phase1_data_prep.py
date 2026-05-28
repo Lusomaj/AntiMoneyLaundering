@@ -1,5 +1,5 @@
 """
-Anti-Gravity AML — Phase 1: Data Preparation & Feature Engineering
+XAI-SNA AML — Phase 1: Data Preparation & Feature Engineering
 Orchestrates: DataLoader → GraphBuilder → MotifDetector → FeatureEngineer → RulesEngine
 Run this FIRST before model training.
 """
@@ -26,7 +26,7 @@ CONFIG_PATH = r'E:\MASTERSProject\AMLProject\aml_config.yaml'
 
 def main():
     print("=" * 70)
-    print("  ANTI-GRAVITY AML SYSTEM — Phase 1: Data Preparation")
+    print("  XAI-SNA AML System — Phase 1: Data Preparation")
     print("=" * 70)
 
     cfg = load_config()
@@ -90,3 +90,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
