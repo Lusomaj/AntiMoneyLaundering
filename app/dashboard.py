@@ -360,14 +360,15 @@ streamlit run app/dashboard.py
     st.caption("© 2024 Joseph Lusoma | Makerere University | v3.0")
 
 # ── TABS ─────────────────────────────────────────────────────────────
-tab1,tab2,tab3,tab4,tab5,tab6,tab7 = st.tabs([
+tab1,tab2,tab3,tab4,tab5,tab6,tab7,tab8 = st.tabs([
     "🏆 Labeled Dataset (Gold Standard)",
     "🔗 Pattern Bridge",
     "🌐 Unlabeled Data Network",
     "🧠 XAI Truth Panel",
     "🎯 Live Detection",
     "⚙️ Rule Management",
-    "📝 Dissertation Hub"
+    "📝 Dissertation Hub",
+    "📥 Alerts & Review Queue"
 ])
 
 # ════════════════════════════════════════════════════════════════════
@@ -811,7 +812,7 @@ with tab3:
                 marker=dict(color=node_colors, size=8), text=[n[:7] for n in nodes_u],
                 textfont=dict(size=7,color='#94a3b8'), showlegend=False))
             fig_fb.update_layout(height=550, xaxis=dict(showticklabels=False), yaxis=dict(showticklabels=False))
-            st.plotly_chart(fig_fb, width="stretch")
+            st.plotly_chart(fig_fb, use_container_width=True)
 
     # Risk distribution
     st.markdown("---")
@@ -824,7 +825,7 @@ with tab3:
     fig_hist.add_vline(x=0.3, line_dash='dot', line_color='#f59e0b',
                        annotation_text='Review (0.3)')
     fig_hist.update_layout(height=240)
-    st.plotly_chart(fig_hist, width="stretch")
+    st.plotly_chart(fig_hist, use_container_width=True)
 
     # ── Account Risk Timeline ─────────────────────────────────────────
     st.markdown("---")
@@ -877,7 +878,7 @@ with tab3:
                                    xaxis_title='Transaction Step',
                                    legend=dict(orientation='h', y=1.1),
                                    margin=dict(t=10, b=40))
-            st.plotly_chart(fig_tl, width="stretch")
+            st.plotly_chart(fig_tl, use_container_width=True)
         else:
             st.info("No timeline data for selected account.")
     else:
@@ -905,16 +906,20 @@ with tab3:
             if unstable:
                 st.warning(f"⚠️ Features with significant drift (PSI ≥ 0.25): `{'`, `'.join(unstable[:5])}`")
         with adv_c:
-            st.markdown("##### 🛡️ Adversarial Robustness Check")
-            adv_recall = adv_data.get('adversarial_ml_recall', None)
-            is_robust  = adv_data.get('meets_robustness_target', None)
-            if adv_recall is not None:
-                rob_color = '#22c55e' if is_robust else '#ef4444'
+            st.markdown("##### 🛡️ Multi-Layer Adversarial Defense")
+            raw_adv_recall = adv_data.get('adversarial_ml_recall', None)
+            topo_recall    = adv_data.get('topology_iforest_recall', None)
+            hybrid_recall  = adv_data.get('hybrid_defense_recall', raw_adv_recall)
+            is_robust      = adv_data.get('meets_robustness_target', None)
+            if hybrid_recall is not None:
+                rob_color = '#22c55e' if is_robust else '#f59e0b'
+                topo_str = f" • Topology IForest: {topo_recall:.1%}" if topo_recall is not None else ""
                 st.markdown(f"""
                 <div style='background:{rob_color}22;border:1px solid {rob_color};
                      border-left:4px solid {rob_color};border-radius:8px;padding:12px'>
-                <strong>Adversarial ML Recall: {adv_recall:.1%}</strong><br>
-                <small>{adv_data.get('interpretation','')}</small>
+                <strong>Hybrid Defense Recall: {hybrid_recall:.1%}</strong> 
+                <small style='color:#94a3b8'>(Raw ML: {raw_adv_recall:.1%}{topo_str})</small><br>
+                <div style='margin-top:6px;font-size:0.85rem;white-space:pre-line;'>{adv_data.get('interpretation','')}</div>
                 </div>""", unsafe_allow_html=True)
 
     # ── Export buttons ───────────────────────────────────────────────
@@ -926,16 +931,16 @@ with tab3:
         if os.path.exists(scored_path):
             with open(scored_path, 'rb') as _f:
                 st.download_button(label="📊 Scored Transactions (CSV)", data=_f.read(),
-                    file_name="interswitch_scored.csv", mime="text/csv", width="stretch")
+                    file_name="interswitch_scored.csv", mime="text/csv", use_container_width=True)
         else:
             st.download_button(label="📊 Demo Transactions (CSV)", data=df_net.to_csv(index=False).encode(),
-                file_name="demo_scored.csv", mime="text/csv", width="stretch")
+                file_name="demo_scored.csv", mime="text/csv", use_container_width=True)
     with dl_c2:
         kpi_path = os.path.join(PROC_DIR, 'operational_kpis.json')
         kpi_bytes = (open(kpi_path, 'rb').read() if os.path.exists(kpi_path)
                      else json.dumps(kpis, indent=2).encode())
         st.download_button(label="📋 KPI Report (JSON)", data=kpi_bytes,
-            file_name="operational_kpis.json", mime="application/json", width="stretch")
+            file_name="operational_kpis.json", mime="application/json", use_container_width=True)
     with dl_c3:
         # SAR PDF export
         try:
@@ -948,9 +953,9 @@ with tab3:
             st.download_button(label="📄 Download SAR Report (PDF)", data=pdf_bytes,
                 file_name=f"suspicious_activity_report.{ext}",
                 mime='application/pdf' if ext == 'pdf' else 'text/plain',
-                width="stretch", type="primary")
+                use_container_width=True, type="primary")
         except Exception as _sar_e:
-            st.button("📄 SAR PDF (install reportlab)", disabled=True, width="stretch",
+            st.button("📄 SAR PDF (install reportlab)", disabled=True, use_container_width=True,
                        help=f"pip install reportlab — Error: {_sar_e}")
 
 # ════════════════════════════════════════════════════════════════════
@@ -976,7 +981,7 @@ with tab4:
                 hovertemplate='<b>%{y}</b><br>SHAP: %{x:.4f}<extra></extra>'))
             fig_imp.update_layout(height=380,
                 yaxis=dict(autorange='reversed'), xaxis_title='Mean |SHAP value|')
-            st.plotly_chart(fig_imp, width="stretch")
+            st.plotly_chart(fig_imp, use_container_width=True)
 
     with col_r:
         st.markdown("#### SHAP Waterfall — Unlabeled Alert")
@@ -985,7 +990,7 @@ with tab4:
             wp = os.path.join(IBM_SHAP_DIR, 'shap_waterfall.png')
         if os.path.exists(wp):
             st.image(wp, caption="SHAP Waterfall — Highest-Risk Unlabeled Transaction",
-                     width="stretch")
+                     use_column_width=True)
         else:
             st.info("Run `phase_interswitch_fieldtest.py` to generate Interswitch SHAP charts.")
             if not imp_df.empty:
@@ -1005,7 +1010,7 @@ with tab4:
                     xaxis_tickangle=-35,
                     title='SHAP Waterfall — Highest-Risk Alert (Illustrative demo; run pipeline for real values)',
                     yaxis_title='SHAP contribution to fraud probability')
-                st.plotly_chart(fig_wf, width="stretch")
+                st.plotly_chart(fig_wf, use_container_width=True)
 
     # XAI KPI detail
     st.markdown("---")
@@ -1044,7 +1049,7 @@ with tab4:
             xaxis=dict(range=[0,1], title='Mean Predicted Probability'),
             yaxis=dict(range=[0,1], title='Fraction of Positives'),
             legend=dict(orientation='h', y=1.1))
-        st.plotly_chart(fig_cal, width="stretch")
+        st.plotly_chart(fig_cal, use_container_width=True)
         brier = cal_data.get('brier_score', None)
         if brier:
             cal_quality = 'Excellent' if brier < 0.05 else 'Good' if brier < 0.1 else 'Moderate'
@@ -1064,7 +1069,7 @@ with tab4:
         fig_cal_d.update_layout(height=280,
             xaxis=dict(range=[0,1], title='Mean Predicted Probability'),
             yaxis=dict(range=[0,1], title='Fraction of Positives'))
-        st.plotly_chart(fig_cal_d, width="stretch")
+        st.plotly_chart(fig_cal_d, use_container_width=True)
 
 # ════════════════════════════════════════════════════════════════════
 # TAB 5 — LIVE DETECTION
@@ -1095,7 +1100,7 @@ with tab5:
             c7,c8     = st.columns(2)
             m_rev = c7.checkbox("Rapid Reversal detected")
             m_srf = c8.checkbox("Smurfing fan-out detected")
-            submitted = st.form_submit_button("🛡️ Run Three-Layer Analysis", width="stretch")
+            submitted = st.form_submit_button("🛡️ Run Three-Layer Analysis", use_container_width=True)
 
         if submitted:
             cfg = load_cfg(); rules = cfg.get('hard_rules', {})
@@ -1123,7 +1128,7 @@ with tab5:
                         'threshold':{'line':{'color':'#ef4444','width':4},'value':65},
                         'bar':{'color':'#3b82f6','thickness':0.3}}))
                 fig_g.update_layout(height=260)
-                st.plotly_chart(fig_g, width="stretch")
+                st.plotly_chart(fig_g, use_container_width=True)
             with c_m:
                 st.metric("Layer 1 Rules",    f"{rule_score}/5 triggered")
                 st.metric("Layer 2 ML Score", f"{ml_score:.1%}")
@@ -1143,7 +1148,7 @@ with tab5:
         speed = st.selectbox("Feed speed", ["Slow (2s)","Normal (1s)","Fast (0.3s)"])
         n_feed = st.number_input("Transactions", 5, 50, 15)
         delay_map = {"Slow (2s)":2.0,"Normal (1s)":1.0,"Fast (0.3s)":0.3}
-        if st.button("▶️ Start Feed", width="stretch"):
+        if st.button("▶️ Start Feed", use_container_width=True):
             placeholder = st.empty(); chart_ph = st.empty()
             log, scores = [], []
             for i in range(int(n_feed)):
@@ -1158,7 +1163,7 @@ with tab5:
                              'Model Score':f'{risk:.2%}',
                              'Status':'🚨 ALERT' if risk>0.65 else '⚠️ REVIEW' if risk>0.35 else '✅ CLEAR'})
                 with placeholder.container():
-                    st.dataframe(pd.DataFrame(log[-12:]), width="stretch", height=280)
+                    st.dataframe(pd.DataFrame(log[-12:]), use_container_width=True, height=280)
                 with chart_ph.container():
                     fig_l = go.Figure()
                     fig_l.add_trace(go.Scatter(y=scores, mode='lines+markers',
@@ -1167,7 +1172,7 @@ with tab5:
                     fig_l.add_hline(y=0.65, line_dash='dash', line_color='#ef4444')
                     fig_l.add_hline(y=0.35, line_dash='dash', line_color='#f59e0b')
                     fig_l.update_layout(height=180, yaxis=dict(range=[0,1]), margin=dict(t=10,b=10))
-                    st.plotly_chart(fig_l, width="stretch")
+                    st.plotly_chart(fig_l, use_container_width=True)
                 time.sleep(delay_map[speed])
             alerts = sum(1 for s in scores if s>0.65)
             st.success(f"✅ Complete. {int(n_feed)} transactions | {alerts} alerts ({100*alerts/int(n_feed):.1f}%)")
@@ -1200,7 +1205,7 @@ with tab6:
 
     cb1, cb2 = st.columns([2,1])
     with cb1:
-        if st.button("💾 Save Rules", width="stretch", type="primary"):
+        if st.button("💾 Save Rules", use_container_width=True, type="primary"):
             cfg_e['hard_rules'].update({
                 'amount_threshold_ugx': int(new_thresh),
                 'smurfing_low_amount_ugx': int(new_smurf_lo),
@@ -1348,3 +1353,123 @@ with tab7:
     st.markdown("---")
     st.caption("XAI-SNA AML | M.Sc. Data Science Dissertation | Makerere University | Joseph Lusoma")
 
+
+
+# ════════════════════════════════════════════════════════════════════
+# TAB 8 — ALERTS & REVIEW QUEUE
+# ════════════════════════════════════════════════════════════════════
+with tab8:
+    st.markdown("### 📥 Alerts & Review Queue")
+    st.markdown("*Enterprise-grade case management workflow. Review pending alerts, assign dispositions, and maintain an audit trail.*")
+    
+    # Load disposition and audit data
+    DISP_PATH = os.path.join(PROC_DIR, 'alert_dispositions.json')
+    AUDIT_PATH = os.path.join(PROC_DIR, 'audit_log.json')
+    
+    def load_json_db(path, default):
+        if os.path.exists(path):
+            with open(path, 'r', encoding='utf-8') as f:
+                try: return json.load(f)
+                except: return default
+        return default
+        
+    def save_json_db(path, data):
+        with open(path, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2)
+
+    dispositions = load_json_db(DISP_PATH, {})
+    audit_log = load_json_db(AUDIT_PATH, [])
+    
+    # Get alerts from the current dataset
+    try:
+        df_alerts = df_net[(df_net.get('ml_flagged', pd.Series([0]*len(df_net))) == 1) | (df_net.get('rule_triggered', pd.Series([0]*len(df_net))) == 1)].copy()
+    except NameError:
+        df_alerts = pd.DataFrame()
+        st.warning("Please run the pipeline to load the live dataset.")
+
+    if not df_alerts.empty:
+        # Determine status
+        df_alerts['Status'] = df_alerts['source'].apply(lambda x: dispositions.get(str(x), {}).get('status', 'PENDING'))
+        df_alerts['Mark Type'] = df_alerts['source'].apply(lambda x: dispositions.get(str(x), {}).get('mark_type', 'None'))
+        
+        # Split pending and reviewed
+        df_pending = df_alerts[df_alerts['Status'] == 'PENDING']
+        df_reviewed = df_alerts[df_alerts['Status'] == 'REVIEWED']
+        
+        qc1, qc2, qc3 = st.columns(3)
+        qc1.metric("Pending Alerts", len(df_pending))
+        qc2.metric("Reviewed Alerts", len(df_reviewed))
+        qc3.metric("Total Alerts in Queue", len(df_alerts))
+        
+        st.markdown("#### ⏳ Pending Queue")
+        if not df_pending.empty:
+            st.dataframe(df_pending[['source', 'amount', 'tran_type', 'rule_score', 'ml_risk_score']], use_container_width=True, height=200)
+            
+            st.markdown("#### 🔎 Mark Fraud / Apply Disposition")
+            selected_alert = st.selectbox("Select Account ID to review:", df_pending['source'].tolist())
+            
+            mc1, mc2 = st.columns(2)
+            with mc1:
+                mark_type = st.selectbox("Mark Type", ["Account Takeover", "Structuring / Smurfing", "BSA Violation", "Correspondent Banking", "False Positive", "Other"])
+                analyst_notes = st.text_area("Analyst Notes")
+            with mc2:
+                if st.button("✅ Submit Disposition", type="primary", use_container_width=True):
+                    # Save disposition
+                    dispositions[selected_alert] = {
+                        "status": "REVIEWED",
+                        "mark_type": mark_type,
+                        "notes": analyst_notes,
+                        "timestamp": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        "analyst": "Analyst_1"
+                    }
+                    save_json_db(DISP_PATH, dispositions)
+                    
+                    # Save audit log
+                    audit_log.append({
+                        "Action": "Apply Disposition",
+                        "Target": selected_alert,
+                        "Mark": mark_type,
+                        "User": "Analyst_1",
+                        "Time": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S")
+                    })
+                    save_json_db(AUDIT_PATH, audit_log)
+                    
+                    st.success(f"Alert for {selected_alert} marked as {mark_type}.")
+                    st.rerun()
+        else:
+            st.success("No pending alerts in the queue! Great job.")
+            
+        st.markdown("---")
+        st.markdown("#### 📜 System Audit Log")
+        if audit_log:
+            df_audit = pd.DataFrame(audit_log)
+            st.dataframe(df_audit.sort_values('Time', ascending=False), use_container_width=True)
+        else:
+            st.info("No audit logs available.")
+            
+        st.markdown("---")
+        st.markdown("#### 📊 Operational Reports & KPIs")
+        
+        # Financial Impact
+        rc1, rc2 = st.columns(2)
+        total_expected_loss = df_pending['amount'].sum() if not df_pending.empty else 0
+        
+        # Fraud marked
+        fraud_marks = ["Account Takeover", "Structuring / Smurfing", "BSA Violation", "Correspondent Banking", "Other"]
+        df_fraud = df_reviewed[df_reviewed['Mark Type'].isin(fraud_marks)]
+        total_confirmed_loss = df_fraud['amount'].sum() if not df_fraud.empty else 0
+        
+        with rc1:
+            st.metric("Total Expected Loss (Pending)", f"UGX {total_expected_loss:,.0f}")
+        with rc2:
+            st.metric("Total Confirmed Loss (Fraud)", f"UGX {total_confirmed_loss:,.0f}")
+            
+        # Rule Impact / False Positive Ratio
+        st.markdown("##### Rule Impact & Dispositions")
+        if not df_reviewed.empty:
+            st.dataframe(df_reviewed['Mark Type'].value_counts().reset_index().rename(columns={'Mark Type':'Disposition', 'count':'Count'}), use_container_width=True)
+        else:
+            st.info("Not enough reviewed alerts to generate Rule Impact report.")
+            
+    else:
+        st.info("No alerts found in the current dataset. Please run the pipeline first.")

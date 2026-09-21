@@ -1,0 +1,98 @@
+% ==============================================================================
+% APPENDIX C: SAMPLE AUTOMATED SUSPICIOUS ACTIVITY REPORT (SAR)
+% ==============================================================================
+\chapter{Sample Automated Suspicious Activity Report (SAR)} \label{app:sar_sample}
+
+This appendix presents an authentic prototype of the automated Suspicious Activity Report (SAR) synthesized by the Layer 4 Explainable AI engine (\texttt{sar\_generator.py}) for an escalated multi-vector alert on the Interswitch Uganda payment switch.
+
+\section{Automated Compliance Filing Dossier}
+
+\begin{tcolorbox}[colback=gray!5,colframe=black!70,title=\textbf{FINANCIAL INTELLIGENCE AUTHORITY (UGANDA) --- SUSPICIOUS ACTIVITY REPORT (SAR)}]
+\small
+\textbf{SAR Reference ID:} \texttt{SAR-ISW-20260920-8119-CRIT}\\
+\textbf{Filing Timestamp:} 2026-09-20 18:44:08 UTC\\
+\textbf{Reporting Institution:} Interswitch Uganda Switch Gateway\\
+\textbf{Designated Compliance Officer:} Automated XAI-SNA Compliance Engine (ID: \texttt{COMP-AI-01})\\
+\textbf{Filing Status:} \textbf{TIER-1 CRITICAL ESCALATION (URGENT)}
+
+\vspace{0.8em}
+\hrule
+\vspace{0.8em}
+
+\subsection*{Section A: Subject and Transaction Summary}
+\begin{tabular}{@{}p{5.5cm}p{8.5cm}@{}}
+\textbf{Originating Account / PAN Mask:} & \texttt{5399-83XX-XXXX-1942} (Wallet ID: \texttt{W-UG-88219}) \\
+\textbf{Beneficiary Entity / PAN Mask:} & \texttt{4021-00XX-XXXX-9102} (Agent POS ID: \texttt{AG-KLA-0492}) \\
+\textbf{Terminal Hardware Identifier:} & \texttt{TERM-KLA-DOWNTOWN-04} (ATM / POS Switch Node) \\
+\textbf{Transaction Timestamp / Step:} & Step 42 (14:32:19 EAT) \\
+\textbf{Transaction Amount:} & \textbf{9,850,000 UGX} (\$2,662.16 USD) \\
+\textbf{Transaction Modality:} & Instant Card-to-Agent Electronic Funds Transfer \\
+\end{tabular}
+
+\vspace{0.8em}
+\hrule
+\vspace{0.8em}
+
+\subsection*{Section B: Multi-Vector Rule Breaches and Typological Triggers}
+\begin{itemize}
+    \item \textbf{Rule R4 (Smurfing Fan-Out):} Account executed 4 distinct outward disbursements to unconnected beneficiaries within 120 minutes.
+    \item \textbf{Rule R8 (Structuring Evasion):} Transaction amount (9,850,000 UGX) is structured within the 98.5\% proximity zone of the statutory 10,000,000 UGX CTR limit.
+    \item \textbf{Rule R14 (Dormant Account Spike):} Account inactive for 114 consecutive steps prior to this transaction, exhibiting an amount spike of $12.4\times$ historical average.
+    \item \textbf{Layer 2 Motif Detection:} Smurfing fan-out graph topology confirmed ($\text{motif\_smurfing} == 1$).
+\end{itemize}
+
+\vspace{0.8em}
+\hrule
+\vspace{0.8em}
+
+\subsection*{Section C: Explainable AI (TreeSHAP) Forensic Attribution}
+\textbf{Base Model Suspiciousness Expectation ($\phi_0$):} 0.0271 (2.71\%)\\
+\textbf{Final Calibrated Risk Probability ($P$):} \textbf{0.9852 (98.52\%)}
+
+\vspace{0.5em}
+\begin{adjustbox}{width=\linewidth,center=\linewidth}
+\begin{tabular}{|l|c|c|p{6.5cm}|}
+\hline
+\rowcolor{gray!20}
+\textbf{Driving Feature} & \textbf{Observed Value} & \textbf{SHAP Contribution ($\phi$)} & \textbf{Attribution Vector} \\
+\hline
+\texttt{hist\_tx\_count} & 14 transactions & $+6.1026$ & Extreme activity frequency burst \\
+\hline
+\texttt{time\_since\_last\_tx} & 114 steps & $+2.7780$ & Sudden awakening of dormant wallet \\
+\hline
+\texttt{is\_cross\_community} & 1 (True) & $+2.4582$ & Funds cross disjoint social modularity clusters \\
+\hline
+\texttt{isTransferTrx} & 1 (True) & $+1.1620$ & High-risk transfer channel \\
+\hline
+\texttt{amount\_log} & 16.10 & $+0.8722$ & Log-normalized volume impact \\
+\hline
+\texttt{source\_pagerank} & 0.00042 & $+0.3163$ & Centrality transit conduit influence \\
+\hline
+\end{tabular}
+\end{adjustbox}
+
+\vspace{0.8em}
+\hrule
+\vspace{0.8em}
+
+\subsection*{Section D: Natural Language Investigative Narrative}
+\textit{``Forensic analysis established acute suspicion of structured money laundering (layering phase). Subject account \texttt{W-UG-88219}, after remaining entirely inactive for 114 days ($\phi = +2.78$), was suddenly reactivated to execute a high-volume transfer of 9,850,000 UGX structured precisely below the statutory CTR limit ($\text{proximity} = 0.985$). Network analysis establishes that this transaction crossed organic community boundaries ($\text{is\_cross\_community} = 1$, $\phi = +2.46$) to disburse funds to an agent terminal exhibiting anomalous fan-out volume. The combination of graph motif detection, extreme TreeSHAP attribution ($\phi_{\text{total}} = +13.69$), and deterministic structuring rules justifies immediate Tier-1 critical escalation and account freezing under Section 31 of the AMLA 2013.''}
+
+\vspace{0.8em}
+\hrule
+\vspace{0.8em}
+
+\subsection*{Section E: Regulatory Disposition Sign-Off}
+\begin{tabular}{@{}p{6.8cm}p{7.2cm}@{}}
+\textbf{Compliance Officer Disposition:} & \textbf{Investigative Action Taken:} \\
+$\boxtimes$ File Formal SAR with FIA Uganda & $\boxtimes$ Temporary Account Debit Freeze Applied \\
+$\square$ Request Additional Customer Due Diligence & $\boxtimes$ Dispatched to Law Enforcement Liaison \\
+$\square$ False Positive / Cleared & $\square$ Closed with No Action \\
+\end{tabular}
+
+\vspace{1.2em}
+\noindent
+\begin{tabular}{@{}p{6.8cm}p{7.2cm}@{}}
+\textbf{Digital Signature:} \texttt{e-SIG-COMP-88192-FIA} & \textbf{Date Verified:} 2026-09-20 18:45:12 EAT \\
+\end{tabular}
+\end{tcolorbox}

@@ -34,6 +34,8 @@ from aml_engine.feature_engineer     import ALL_FEATURES
 from aml_engine.pattern_bridge       import build_pattern_bridge, load_bridge_report
 from aml_engine.operational_evaluator import build_operational_kpis
 from aml_engine.xai_engine           import compute_shap_values
+from aml_engine.rules_engine         import apply_composite_rules
+from aml_engine.anomaly_detector     import TopologyIsolationForest
 
 ROOT = os.path.dirname(__file__)
 CONFIG_PATH = os.path.join(ROOT, 'aml_config.yaml')
@@ -164,15 +166,49 @@ def main():
     df_isw['alert_threshold'] = relative_thresh
     df_isw['inference_source'] = 'IBM_TRAINED_MODEL (relative-threshold)'
 
+    # Apply Layer 4 Composite Rules (RUL-L4-01 Critical Escalation & RUL-L4-02 FP Auto-Clear)
+    df_isw = apply_composite_rules(df_isw, ml_scores_norm, high_risk_cutoff=0.75, auto_clear_cutoff=0.15)
+
     n_flagged = ml_preds.sum()
     print(f"  IBM model flagged: {n_flagged:,} / {len(df_isw):,} "
           f"({100*n_flagged/len(df_isw):.2f}%) Interswitch transactions")
+
+    # Structuring & cold-start features (guaranteed present for adversarial defense)
+    rules = cfg.get('hard_rules', {})
+    threshold = rules.get('amount_threshold_ugx', 10_000_000)
+    struct_thresh_pct = rules.get('structuring_threshold_percent', 0.85)
+    if 'structuring_proximity' not in df_isw.columns and 'amount' in df_isw.columns:
+        df_isw['structuring_proximity'] = np.clip(df_isw['amount'] / (threshold + 1e-5), 0.0, 1.0)
+    if 'is_structuring_zone' not in df_isw.columns and 'amount' in df_isw.columns:
+        df_isw['is_structuring_zone'] = (
+            (df_isw['amount'] >= (threshold * struct_thresh_pct)) & 
+            (df_isw['amount'] < threshold)
+        ).astype(int)
+    if 'cold_start_flag' not in df_isw.columns and 'hist_tx_count' in df_isw.columns:
+        df_isw['cold_start_flag'] = (df_isw['hist_tx_count'] <= 2).astype(int)
+    if 'cold_start_structuring_risk' not in df_isw.columns and 'cold_start_flag' in df_isw.columns:
+        df_isw['cold_start_structuring_risk'] = (df_isw['cold_start_flag'] & df_isw['is_structuring_zone']).astype(int)
+
+    # ── Step 3b: Topology Isolation Forest (Unsupervised Defense) ──
+    print(f"\n[Stage 3] Step 3b: Fitting Topology Isolation Forest (Unsupervised Defense)...")
+    topo_iforest = TopologyIsolationForest(contamination=0.03, random_state=42)
+    topo_iforest.fit(df_isw, max_samples=100_000)
+    topo_res = topo_iforest.score(df_isw)
+    df_isw['topo_anomaly_score'] = topo_res['scores']
+    df_isw['is_topo_anomaly']   = topo_res['is_anomaly']
+
+    topo_model_path = os.path.join(models_dir, 'topology_iforest.pkl')
+    topo_iforest.save(topo_model_path)
+    print(f"  Topology anomalies flagged: {int(topo_res['is_anomaly'].sum()):,} ({100*topo_res['is_anomaly'].mean():.2f}%)")
 
     # ── Step 4: Save scored dataset ───────────────────────────
     print(f"\n[Stage 3] Step 4: Saving scored Interswitch dataset...")
     scored_path = os.path.join(ROOT, s3_cfg['fieldtest_output'])
     save_cols = ['source', 'target', 'terminal_id', 'amount', 'tran_type', 'step',
                  'rule_triggered', 'rule_score', 'ml_risk_score', 'ml_flagged',
+                 'auto_cleared', 'tier1_critical_escalation', 'composite_disposition',
+                 'topo_anomaly_score', 'is_topo_anomaly',
+                 'structuring_proximity', 'is_structuring_zone',
                  'motif_circular', 'motif_smurfing', 'motif_reversal',
                  'inference_source', 'dataset']
     save_cols = [c for c in save_cols if c in df_isw.columns]
@@ -253,6 +289,7 @@ def main():
         feature_names=feature_names[:ibm_feat_count],
         cfg=cfg,
         output_dir=os.path.join(ROOT, paths_cfg['processed_dir']),
+        topo_iforest=topo_iforest,
     )
 
     # ── Final Summary ─────────────────────────────────────────
@@ -263,9 +300,13 @@ def main():
     kpi1 = kpi_report.get('kpi_1_fp_reduction', {})
     kpi2 = kpi_report.get('kpi_2_latency', {})
     kpi3 = kpi_report.get('kpi_3_explainability', {})
+    adv_kpi = kpi_report.get('adversarial_robustness', {})
     print(f"    KPI 1 FP Reduction   : {kpi1.get('fp_reduction_rate', 0):.1%}")
     print(f"    KPI 2 Latency        : {kpi2.get('mean_latency_ms', 0):.1f}ms / 100 tx")
     print(f"    KPI 3 XAI Coverage   : {kpi3.get('mean_top3_coverage', 0):.1%}")
+    print(f"    Adv. Raw ML Recall   : {adv_kpi.get('adversarial_ml_recall', 0):.1%}")
+    print(f"    Adv. Topology Recall : {adv_kpi.get('topology_iforest_recall', 0):.1%}")
+    print(f"    Adv. Hybrid Recall   : {adv_kpi.get('hybrid_defense_recall', 0):.1%}")
     print(f"    KPIs Passed          : {kpi_report.get('kpis_met', 0)}/3")
     if bridge_report:
         print(f"    Pattern Similarity   : {bridge_report.get('overall_similarity', 0):.1%}")

@@ -1,0 +1,238 @@
+\chapter{Research Methodology} \label{ch:methodology}
+
+\section{Introduction}
+This chapter delineates the quantitative, experimental research design formulated to develop and evaluate the multi-layer hybrid Anti-Money Laundering (AML) framework. The methodology integrates empirical data preprocessing, large-scale financial graph construction, algorithmic extraction of 38 multi-dimensional features, supervised and unsupervised machine learning optimization, domain adaptation via statistical transfer, and game-theoretic explainability. 
+
+Figure~\ref{fig:methodology_pipeline} provides an end-to-end architectural workflow of the research methodology across its three primary stages: Stage 1 (IBM Gold-Standard Benchmark Training), Stage 2 (Cross-Domain Pattern Bridge), and Stage 3 (Interswitch Real-World Field Test).
+
+\begin{figure}[hbt!]
+\centering
+\fbox{\parbox{0.95\textwidth}{
+\centering
+\textbf{Stage 1: IBM Gold-Standard Benchmark Training (562,376 Transactions)}\\
+$\downarrow$\\
+\fbox{Raw Transactions} $\rightarrow$ \fbox{Graph Builder $G(V,E,W)$} $\rightarrow$ \fbox{38-Feature Engineering} $\rightarrow$ \fbox{Supervised ML Suite \& SNA Ablation}\\
+$\downarrow$\\
+\textbf{Stage 2: Cross-Domain Statistical Pattern Bridge}\\
+$\downarrow$\\
+\fbox{IBM Distribution Stats} $\stackrel{\text{Mann-Whitney } U \text{ \& Bootstrap CI}}{\longleftrightarrow}$ \fbox{Interswitch Uganda Distribution Stats}\\
+$\downarrow$\\
+\textbf{Stage 3: Real-World Interswitch Field Test (300,000 Transactions)}\\
+$\downarrow$\\
+\fbox{Interswitch Raw Switch Logs} $\rightarrow$ \fbox{Domain Adaptation $[P_1, P_{99}]$} $\rightarrow$ \fbox{Topology Isolation Forest + XGBoost} $\rightarrow$ \fbox{Layer 4 Composite Decision Engine} $\rightarrow$ \fbox{Automated SAR PDFs \& KPIs}
+}}
+\caption{End-to-end experimental research methodology and multi-stage execution pipeline.}
+\label{fig:methodology_pipeline}
+\end{figure}
+
+\section{Data Sources and Acquisition}
+Empirical evaluation in financial crime research is notoriously hindered by data scarcity and confidentiality constraints. To establish both theoretical validity and operational generalizability, this dissertation adopts a dual-dataset strategy:
+
+\subsection{IBM Transactions for Anti-Money Laundering (HI-Large)}
+The IBM Transactions for Anti-Money Laundering dataset (HI-Large version) serves as the gold-standard benchmark for model training, hyperparameter optimization, and granular ablation analysis~\cite{weber2019anti}. The dataset features:
+\begin{itemize}
+    \item \textbf{Scale and Volume:} 562,376 fully labelled financial transactions spanning 100 distinct temporal steps.
+    \item \textbf{Ground-Truth Labels:} Binary target variable $y \in \{0, 1\}$ identifying verified laundering transactions generated through agent-based multi-typology simulations.
+    \item \textbf{Laundering Prevalence:} Contains 12,475 confirmed laundering transactions, yielding a realistic imbalanced positive prevalence of approximately $2.22\%$.
+    \item \textbf{Typological Complexity:} Models complex multi-node money laundering subgraphs including fan-in smurfing aggregations, fan-out scattering, cyclical layering paths, and bipartite pass-through networks.
+\end{itemize}
+
+\subsection{Interswitch Uganda Real-World Payment Switch Dataset}
+To validate real-world operational viability in an authentic Sub-Saharan African environment, field testing was conducted on transaction streams from Interswitch Uganda, the premier national electronic payment switch. The dataset features:
+\begin{itemize}
+    \item \textbf{Scale and Volume:} 300,000 consecutive transaction records captured across nationwide ATM terminals and POS agency banking locations.
+    \item \textbf{Entity Scope:} Encompasses 30,506 active wallet and bank accounts interfacing with point-of-sale agent terminals.
+    \item \textbf{Attribute Structure:} ISO 8583 message attributes including Source Account/Card PAN, Destination Account, Terminal ID, Timestamp/Step, Transaction Amount, Currency, Transaction Type (Cash Withdrawal, Funds Transfer, Balance Inquiry, Purchase, Deposit), and Response Status Code.
+    \item \textbf{Ground-Truth Characteristics:} Unlabelled production stream reflecting authentic operational conditions where true laundering labels are absent and operational evaluation must rely on compliance KPIs rather than simple supervised accuracy.
+\end{itemize}
+
+\section{Data Preprocessing and Currency Normalization}
+Raw transactional logs require rigorous cleansing and normalization to ensure feature consistency across datasets:
+\begin{enumerate}
+    \item \textbf{Entity Parsing and Missing Value Treatment:} Null account identifiers are standardized. Unassigned target accounts in single-party transactions (e.g., cash withdrawals at an ATM) are linked to the specific ATM/POS terminal hardware node, modeling the physical machine as an infrastructure sink.
+    \item \textbf{Temporal Step Harmonization:} Timestamps are parsed into discrete temporal steps ($\Delta t = 1\text{ hour}$), enabling rolling velocity and burst aggregations.
+    \item \textbf{Currency Standardization to Uganda Shillings (UGX):} Because the IBM dataset records monetary values in United States Dollars (USD) while Interswitch operates in Uganda Shillings (UGX), amounts are normalized. In accordance with Bank of Uganda foreign exchange baselines, a conversion parity of $1\text{ USD} = 3,700\text{ UGX}$ is applied. Consequently, statutory FATF CTR thresholds (\$10,000 USD and 10,000,000 UGX) align coherently across feature extractors.
+\end{enumerate}
+
+\section{Graph Construction and Mathematical Formulations}
+\subsection{Transaction Multigraph Formulation}
+Financial transactions are formally modeled as a directed, weighted multigraph:
+\begin{equation}
+    G = (V, E, W, T)
+\end{equation}
+where:
+\begin{itemize}
+    \item $V = \{v_1, v_2, \dots, v_n\}$ represents the set of all unique financial accounts, mobile wallets, and terminal infrastructure nodes.
+    \item $E = \{e_1, e_2, \dots, e_m\}$ is the set of directed edges, where each edge $e_k = (u, v)$ represents a transaction from source account $u$ to target account $v$.
+    \item $W(e_k) \in \mathbb{R}^+$ denotes the transaction volume.
+    \item $T(e_k) \in \mathbb{N}$ denotes the temporal step at which transaction $e_k$ occurred.
+\end{itemize}
+
+\subsection{Super-Hub Optimization for Graph Metrics}
+A critical computational bottleneck identified during graph construction is the presence of ``super-hub'' infrastructure nodes (e.g., clearing gateways or centralized card switches like \texttt{IBM\_VIRTUAL}). In a graph with $10^5$ nodes, a hub connected to $50,000$ accounts causes local clustering coefficient algorithms to execute in $O(d^2) = O(2.5 \times 10^9)$ operations per step, causing execution to hang indefinitely ($>2.5\text{ hours}$).
+
+To eliminate this bottleneck, the graph engine implements \textbf{Infrastructure-Aware Subgraph Partitioning}:
+\begin{equation}
+    V_{\text{account}} = \{v \in V \mid \text{is\_infrastructure}(v) = 0\}
+\end{equation}
+Local clustering coefficients and triadic closure metrics are strictly computed on the induced account subgraph $G[V_{\text{account}}]$, dropping calculation time from $2.5\text{ hours}$ to \textbf{1.93 seconds} with zero loss in criminological fidelity.
+
+\subsection{Mathematical Formulations of Network Metrics}
+For each node $v \in V$, the following topological features are extracted:
+
+\paragraph{Directed Degree Centrality:}
+Differentiates between fan-in collection and fan-out disbursement:
+\begin{equation}
+    \text{deg}_{\text{in}}(v) = |\{u \in V \mid (u, v) \in E\}|, \quad \text{deg}_{\text{out}}(v) = |\{u \in V \mid (v, u) \in E\}|
+\end{equation}
+
+\paragraph{PageRank Concurrency Score:}
+Measures structural influence and transit centrality via power iteration:
+\begin{equation}
+    \text{PR}(v) = \frac{1 - d}{|V|} + d \sum_{u \in \mathcal{N}_{\text{in}}(v)} \frac{\text{PR}(u)}{\text{deg}_{\text{out}}(u)}
+\end{equation}
+where $d = 0.85$ is the damping factor and $\mathcal{N}_{\text{in}}(v)$ denotes incoming neighbors.
+
+\paragraph{Betweenness Centrality:}
+Quantifies an account's role as a bridge between disjoint financial components:
+\begin{equation}
+    C_B(v) = \sum_{s \neq v \neq t} \frac{\sigma_{st}(v)}{\sigma_{st}}
+\end{equation}
+where $\sigma_{st}$ is the total number of shortest paths from $s$ to $t$ and $\sigma_{st}(v)$ is the number of those paths passing through $v$.
+
+\paragraph{Local Clustering Coefficient:}
+Measures the density of triangles in a node's local neighborhood, indicating syndicate collusion:
+\begin{equation}
+    C_{\text{local}}(v) = \frac{2 \cdot |\{(u, w) \in E \mid u, w \in \mathcal{N}(v)\}|}{k_v (k_v - 1)}
+\end{equation}
+where $k_v = |\mathcal{N}(v)|$ is the degree of node $v$.
+
+\paragraph{Flow-Through Turnover Ratio:}
+Quantifies transient conduit behavior where incoming funds are immediately evacuated:
+\begin{equation}
+    \text{FTR}(v) = \frac{V_{\text{out}}(v)}{V_{\text{in}}(v) + 1.0} = \frac{\sum_{(v, u) \in E} W(v, u)}{\sum_{(u, v) \in E} W(u, v) + 1.0}
+\end{equation}
+A value of $\text{FTR}(v) \approx 1.0$ accompanied by short latency signals classic money mule transit behavior.
+
+\paragraph{Community Boundary Crossing:}
+Using the Louvain modularity maximization algorithm~\cite{blondel2008fast}, nodes are partitioned into disjoint communities $\{C_1, C_2, \dots, C_k\}$ maximizing modularity $Q$:
+\begin{equation}
+    Q = \frac{1}{2m} \sum_{i,j} \left[ A_{ij} - \frac{k_i k_j}{2m} \right] \delta(c_i, c_j)
+\end{equation}
+For every transaction $e = (u, v)$, a binary community hop indicator is derived:
+\begin{equation}
+    \text{is\_cross\_community}(u, v) = \mathbb{I}(c(u) \neq c(v))
+\end{equation}
+
+\subsection{Topological Subgraph Motif Mining}
+The graph engine executes targeted motif pattern recognition:
+\begin{enumerate}
+    \item \textbf{Circular Flow Cycles ($\text{motif\_circular}$):} Traverses directed paths of length $L \in [3, 5]$ to detect cycles where capital returns to the originator ($u \rightarrow v_1 \rightarrow v_2 \rightarrow \dots \rightarrow u$) within temporal threshold $\Delta t \le 72\text{ hours}$.
+    \item \textbf{Fan-In / Fan-Out Smurfing ($\text{motif\_smurfing}$):} Evaluates whether an account receives transfers from $\ge 3$ distinct source accounts within $\Delta t \le 24\text{ hours}$ followed by rapid consolidation, or disperses funds to $\ge 3$ beneficiaries.
+    \item \textbf{Rapid Reversal ($\text{motif\_reversal}$):} Identifies immediate reciprocal transactions $(u, v)$ followed by $(v, u)$ with $|W(u, v) - W(v, u)| / W(u, v) \le 0.05$ within $\Delta t \le 2\text{ hours}$.
+\end{enumerate}
+
+\section{Multi-Dimensional Feature Engineering (38 Features)}
+The engineered feature space integrates 38 continuous and discrete variables structured into five functional groups:
+\begin{enumerate}
+    \item \textbf{Tabular Financial Features (10):} $\text{amount}$, $\text{amount\_log} = \ln(1 + \text{amount})$, $\text{is\_small\_amount}$, $\text{is\_large\_amount}$, $\text{isWithdrawTrx}$, $\text{isTransferTrx}$, $\text{isRefundTrx}$, $\text{isDepositTrx}$, $\text{isPurchaseTrx}$, $\text{tran\_type\_encoded}$.
+    \item \textbf{Graph Topology and SNA Features (19):} $\text{source\_degree\_cent}$, $\text{target\_degree\_cent}$, $\text{source\_betweenness}$, $\text{target\_betweenness}$, $\text{source\_pagerank}$, $\text{target\_pagerank}$, $\text{terminal\_pagerank}$, $\text{community\_id}$, $\text{community\_size}$, $\text{is\_cross\_community}$, $\text{source\_is\_infrastructure}$, $\text{target\_is\_infrastructure}$, $\text{source\_in\_degree}$, $\text{source\_out\_degree}$, $\text{target\_in\_degree}$, $\text{target\_out\_degree}$, $\text{source\_clustering\_coef}$, $\text{target\_clustering\_coef}$, $\text{source\_flow\_through\_ratio}$.
+    \item \textbf{Temporal Velocity and Spike Features (6):} $\text{hist\_tx\_count}$ (cumulative count), $\text{tx\_count\_last\_step}$ (current window velocity), $\text{total\_amount\_last\_step}$, $\text{time\_since\_last\_tx}$, $\text{amount\_vs\_hist\_mean} = \text{amount} / (\bar{W}_{\text{hist}} + \epsilon)$, and $\text{is\_dormant\_spike} = \mathbb{I}(\text{time\_since\_last\_tx} \ge 90 \land \text{amount\_vs\_hist\_mean} \ge 5.0)$.
+    \item \textbf{Graph Motif Flags (3):} $\text{motif\_circular}$, $\text{motif\_smurfing}$, $\text{motif\_reversal}$.
+    \item \textbf{Adversarial Structuring and Cold-Start Features (4):} $\text{structuring\_proximity} = \min(\text{amount} / \theta_{\text{reg}}, 1.0)$, $\text{is\_structuring\_zone} = \mathbb{I}(0.85 \cdot \theta_{\text{reg}} \le \text{amount} < \theta_{\text{reg}})$, $\text{cold\_start\_flag} = \mathbb{I}(\text{hist\_tx\_count} \le 2)$, and $\text{cold\_start\_structuring\_risk} = \text{cold\_start\_flag} \times \text{is\_structuring\_zone}$.
+\end{enumerate}
+
+\section{Machine Learning Pipeline and Model Suite}
+\subsection{Temporal Train/Test Splitting}
+To guarantee methodological rigor and prevent temporal data leakage, transactions are strictly split chronologically:
+\begin{itemize}
+    \item \textbf{Training Set ($80\%$):} Transactions occurring in temporal steps $t \in [0, 79]$.
+    \item \textbf{Test Set ($20\%$):} Transactions occurring in temporal steps $t \in [80, 99]$.
+\end{itemize}
+
+\subsection{Candidate Algorithms and Training Specifications}
+The evaluation suite benchmarks six distinct modeling paradigms:
+\begin{enumerate}
+    \item \textbf{Logistic Regression (Baseline):} Optimized with L2 regularization and liblinear solver.
+    \item \textbf{Random Forest:} Ensemble of 100 decorrelated decision trees, max depth 15, balanced class weighting.
+    \item \textbf{eXtreme Gradient Boosting (XGBoost):} Tree boosting with learning rate $\eta = 0.05$, max depth 6, subsample ratio 0.8, scale pos weight calibrated to class ratio.
+    \item \textbf{Multi-Layer Perceptron (MLP):} Feedforward neural network with architecture $(128, 64)$, ReLU activation, Adam optimizer, early stopping, and batch normalization.
+    \item \textbf{Stacked Ensemble:} Meta-classifier (Logistic Regression) trained on out-of-fold probability predictions of the tuned Random Forest and XGBoost estimators.
+    \item \textbf{Hard Rules Only (Regulatory Baseline):} Deterministic boolean evaluation of traditional AML rule sets.
+\end{enumerate}
+
+\section{Unsupervised Topology Isolation Forest}
+To neutralize the vulnerability where criminals evade supervised models by manipulating transaction amounts just below learned splits, an unsupervised \textbf{Topology Isolation Forest} was developed.
+
+\subsection{Mathematical Formulation}
+Let $\mathbf{X}_{\text{topo}} \in \mathbb{R}^{N \times 14}$ denote the matrix of purely structural network metrics, completely excluding $\text{amount}$ and financial values. An ensemble of $T=100$ isolation trees is constructed by recursively partitioning $\mathbf{X}_{\text{topo}}$ using random axis-aligned splits. The anomaly score $s(\mathbf{x}, N)$ for a transaction vector $\mathbf{x}$ across $N$ instances is given by~\cite{liu2008isolation}:
+\begin{equation}
+    s(\mathbf{x}, N) = 2^{-\frac{\mathbb{E}[h(\mathbf{x})]}{c(N)}}
+\end{equation}
+where $h(\mathbf{x})$ is the path length to termination, $\mathbb{E}[h(\mathbf{x})]$ is the average path length across all isolation trees, and $c(N)$ is the average path length of unsuccessful searches in a Binary Search Tree:
+\begin{equation}
+    c(N) = 2 \left( \ln(N - 1) + 0.5772156649 \right) - \frac{2(N - 1)}{N}
+\end{equation}
+
+\subsection{Amount Invariance Property}
+Because $\text{amount} \notin \mathbf{X}_{\text{topo}}$, the anomaly score satisfies strict invariance under amount perturbation:
+\begin{equation}
+    s(\mathbf{x} \mid \text{amount} = 9,900,000) \equiv s(\mathbf{x} \mid \text{amount} = 10,000,000)
+\end{equation}
+Consequently, launderers attempting amount evasion cannot alter their structural anomaly score.
+
+\section{Domain Adaptation and Statistical Pattern Bridge}
+To transfer models trained on synthetic gold-standard benchmarks to unlabelled real-world transaction streams without label bias, a \textbf{Statistical Pattern Bridge} was constructed.
+
+\subsection{Quantile Percentile Range Adaptation}
+Feature distributions across disparate domains (USD vs. UGX scale, synthetic vs. organic switch connectivity) differ in scale. Before inference on Interswitch data, features are percentile-clipped against the IBM training range:
+\begin{equation}
+    x_{j}^{\text{clipped}} = \min\left(\max\left(x_{j}, P_{01}^{\text{IBM}}(j)\right), P_{99}^{\text{IBM}}(j)\right)
+\end{equation}
+This bounds out-of-distribution values and prevents sigmoid saturation in model scoring.
+
+\subsection{Statistical Hypothesis Testing}
+Cross-domain structural transferability is formally evaluated using:
+\begin{itemize}
+    \item \textbf{Mann-Whitney $U$ Non-Parametric Test:} Evaluates whether feature rank distributions differ significantly across IBM and Interswitch.
+    \item \textbf{Bootstrap 95\% Confidence Intervals:} Computes empirical confidence bounds across 1,000 bootstrap resamples of graph similarity scores.
+\end{itemize}
+
+\section{Explainable AI Pipeline and Automated SAR Generation}
+\subsection{TreeSHAP Attribution Computation}
+For every alert generated by the model, local feature attributions $\phi_i(\mathbf{x})$ are computed via exact TreeSHAP~\cite{lundberg2020local}:
+\begin{equation}
+    f(\mathbf{x}) = \phi_0 + \sum_{i=1}^{M} \phi_i(\mathbf{x})
+\end{equation}
+where $\phi_0 = \mathbb{E}[f(X)]$ is the base value and $\phi_i$ measures the exact log-odds contribution of feature $i$.
+
+\subsection{Automated Suspicious Activity Report (SAR) Generation}
+To fulfill statutory filing mandates under FATF Recommendation 20 and FIA Uganda guidelines, the system dynamically compiles:
+\begin{enumerate}
+    \item A natural language narrative synthesizing the top-3 driving risk factors (e.g., ``Account exhibits elevated risk driven by rapid transaction velocity ($\text{hist\_tx\_count}=14$) and cross-community funds transit'').
+    \item A visual local waterfall plot rendering the exact push/pull of features.
+    \item An auditable, court-admissible PDF document complete with unique SAR Reference IDs, timestamps, and investigator disposition sign-offs.
+\end{enumerate}
+
+\section{Evaluation Metrics and Operational Framework}
+Performance is evaluated across two distinct levels:
+\subsection{Machine Learning Performance Metrics (Stage 1 Benchmark)}
+\begin{itemize}
+    \item \textbf{Area Under the Precision-Recall Curve (AUPRC):} The primary metric for severe class imbalance, measuring average precision across all recall thresholds.
+    \item \textbf{ROC-AUC:} Area under the Receiver Operating Characteristic curve.
+    \item \textbf{Precision, Recall, and F1-Score:} Evaluated at the calibrated F1-optimal threshold $\tau^* = \arg\max_\tau F_1(\tau)$.
+\end{itemize}
+
+\subsection{Operational Field Test KPIs (Stage 3 Field Test)}
+On unlabelled production data, performance is evaluated against three pre-registered operational KPIs:
+\begin{enumerate}
+    \item \textbf{KPI 1 (False Positive Reduction Rate):} Measures the fraction of spurious rule-based alerts filtered by the ML+SNA layer:
+    \begin{equation}
+        \text{FPRR} = \frac{\text{Alerts}_{\text{rule-only}} - \text{Alerts}_{\text{confirmed}}}{\text{Alerts}_{\text{rule-only}}} \quad (\text{Target} \ge 30\%)
+    \end{equation}
+    \item \textbf{KPI 2 (Inference Latency):} Real-time execution latency evaluated across 100-transaction batches ($\text{Target} \le 500\text{ ms}$).
+    \item \textbf{KPI 3 (Explainability Coverage):} Fraction of total alert SHAP magnitude explained by the top-3 features ($\text{Target} \ge 55\%$).
+\end{enumerate}
+
+\section{Summary}
+This chapter formulated the mathematical, architectural, and experimental methodology of the dissertation. By combining rigorous graph construction, super-hub optimization, 38 engineered features, dual supervised/unsupervised machine learning, domain adaptation, and TreeSHAP explainability, the methodology provides a replicable framework for financial crime detection in high-velocity switching networks.

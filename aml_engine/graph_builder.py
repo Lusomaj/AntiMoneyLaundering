@@ -81,10 +81,12 @@ def compute_sna_features(G: nx.DiGraph, cfg: dict) -> dict:
     """
     Compute all SNA features. Returns dict: {node_id → feature_dict}
     """
-    print("[GraphBuilder] Computing Degree Centrality...")
-    in_degree  = dict(G.in_degree(weight='weight'))
-    out_degree = dict(G.out_degree(weight='weight'))
-    deg_cent   = nx.degree_centrality(G)
+    print("[GraphBuilder] Computing Degree Centrality & Directed Degrees...")
+    in_degree      = dict(G.in_degree(weight='weight'))
+    out_degree     = dict(G.out_degree(weight='weight'))
+    in_degree_cnt  = dict(G.in_degree())
+    out_degree_cnt = dict(G.out_degree())
+    deg_cent       = nx.degree_centrality(G)
 
     print("[GraphBuilder] Computing PageRank (infrastructure-aware)...")
     try:
@@ -92,10 +94,10 @@ def compute_sna_features(G: nx.DiGraph, cfg: dict) -> dict:
     except Exception:
         pagerank = {n: 0.0 for n in G.nodes}
 
-    print("[GraphBuilder] Computing Betweenness Centrality (k=500 approx)...")
+    print("[GraphBuilder] Computing Betweenness Centrality (k=100 approx)...")
     try:
         n_nodes = G.number_of_nodes()
-        k_approx = min(500, n_nodes - 1) if n_nodes > 2 else None
+        k_approx = min(100, n_nodes - 1) if n_nodes > 2 else None
         between_cent = nx.betweenness_centrality(G, k=k_approx, weight='weight', normalized=True)
     except Exception:
         between_cent = {n: 0.0 for n in G.nodes}
@@ -138,14 +140,33 @@ def compute_sna_features(G: nx.DiGraph, cfg: dict) -> dict:
     from collections import Counter
     comm_sizes = Counter(community_map.values())
 
+    print("[GraphBuilder] Computing Clustering Coefficient (local edge density on account subgraph)...")
+    try:
+        # Exclude super-hub infrastructure nodes (e.g. IBM_VIRTUAL / ATMs with degree > 2000)
+        # to focus on genuine account-to-account collusive rings and prevent O(d^2) triangle explosion.
+        infra_or_hub = [n for n in G_undirected.nodes if G_undirected.nodes[n].get('node_type') == 'infrastructure' or G_undirected.degree(n) > 2000]
+        Gu_account = G_undirected.copy()
+        Gu_account.remove_nodes_from(infra_or_hub)
+        clustering_map = nx.clustering(Gu_account)
+    except Exception as e_clust:
+        print(f"[GraphBuilder] Clustering coefficient fallback: {e_clust}")
+        clustering_map = {n: 0.0 for n in G.nodes}
+
     # Assemble final per-node feature dict
     sna_features = {}
     for node in G.nodes:
         comm_id = community_map.get(node, -1)
+        in_wt = float(in_degree.get(node, 0.0))
+        out_wt = float(out_degree.get(node, 0.0))
+        ft_ratio = out_wt / (in_wt + 1.0)
         sna_features[node] = {
             'degree_centrality':    deg_cent.get(node, 0.0),
-            'in_degree':            in_degree.get(node, 0),
-            'out_degree':           out_degree.get(node, 0),
+            'in_degree':            in_wt,
+            'out_degree':           out_wt,
+            'in_degree_cnt':        in_degree_cnt.get(node, 0),
+            'out_degree_cnt':       out_degree_cnt.get(node, 0),
+            'clustering_coefficient': float(clustering_map.get(node, 0.0)),
+            'flow_through_ratio':   float(ft_ratio),
             'betweenness_centrality': between_cent.get(node, 0.0),
             'pagerank':             pagerank.get(node, 0.0),
             'community_id':         comm_id,

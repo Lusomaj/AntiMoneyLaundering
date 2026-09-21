@@ -1,0 +1,80 @@
+\chapter{AML Rulebook and Composite Decision Engine Specifications} \label{app:rulebook_specs}
+
+This appendix provides the complete formal specifications of the deterministic rules (R1--R14) and the Layer 4 Composite Rules, mapping them to international FATF recommendations and Ugandan statutory compliance regulations.
+
+\section{Regulatory Alignment Mapping}
+Table~\ref{tab:regulatory_mapping} delineates the statutory mapping of all implemented detection rules against the Financial Action Task Force (FATF) 40 Recommendations and the Uganda Anti-Money Laundering Act (AMLA) 2013 Regulations.
+
+\begin{table}[hbt!]
+\centering
+\caption{Statutory Mapping of Framework Rules to Regulatory Mandates}
+\label{tab:regulatory_mapping}
+\begin{adjustbox}{width=\textwidth,center=\textwidth}
+\begin{tabular}{|l|l|l|l|}
+\hline
+\rowcolor{gray!40}
+\textbf{Rule ID} & \textbf{Rule Description} & \textbf{FATF Recommendation} & \textbf{Uganda AMLA Statutory Article} \\
+\hline
+\textbf{R1} & Cash Threshold Exceedance & Recommendation 10 \& 16 & AMLA Reg. 36 (Mandatory Currency Transaction Report) \\
+\hline
+\textbf{R2} & High-Risk Transaction Modality & Recommendation 10 (Ongoing CDD) & AMLA Section 6 (Enhanced Customer Due Diligence) \\
+\hline
+\textbf{R3} & Rapid Flow Reversal & Recommendation 20 (Suspicious Activity) & AMLA Section 31 (Reporting of Suspicious Transactions) \\
+\hline
+\textbf{R4} & Smurfing Fan-Out / Fan-In & Recommendation 20 \& Interpretive Note & AMLA Section 31 \& FIA Typology Guidance on Structuring \\
+\hline
+\textbf{R5} & Circular Flow Layering & Recommendation 20 & AMLA Section 31 (Concealment and Disguise of Funds) \\
+\hline
+\textbf{R6} & Velocity Threshold Breach & Recommendation 10 & BOU Risk Management Guidelines Section 4.2 \\
+\hline
+\textbf{R7} & Terminal Card Burst & Recommendation 16 (Wire Transfers) & National Payment Systems Act (NPSA) 2020 \\
+\hline
+\textbf{R8} & Structuring / Evasion Threshold & Recommendation 20 (Structuring) & AMLA Section 31(2) (Splitting Transactions) \\
+\hline
+\textbf{R9} & Zero-Retention Pass-Through & Recommendation 20 & AMLA Section 3 (Definition of Money Laundering) \\
+\hline
+\textbf{R10} & Mule Terminal Multi-Card & Recommendation 10 & BOU Agent Banking Regulations 2017 \\
+\hline
+\textbf{R11} & Card Probing / Testing & Recommendation 10 & NPSA Cybersecurity Guidelines 2021 \\
+\hline
+\textbf{R12} & High-Value Off-Peak Activity & Recommendation 10 & BOU Enhanced Monitoring Guidelines \\
+\hline
+\textbf{R13} & High-Risk Foreign Currency & Recommendation 19 (Higher-Risk Countries) & AMLA Section 18 (Cross-Border Foreign Currency Declarations) \\
+\hline
+\textbf{R14} & Dormant Account Awakening Spike & Recommendation 10 & BOU Guidelines on Dormant Account Reactivation \\
+\hline
+\hline
+\textbf{RUL-L4-01} & Tier-1 Critical Escalation & Recommendation 20 (Immediate Filing) & AMLA Section 31 (Urgent STR/SAR Escalation within 48h) \\
+\hline
+\textbf{RUL-L4-02} & Low-Risk False-Positive Auto-Clear & Recommendation 1 (Risk-Based Approach) & AMLA Section 3(3) (Risk-Based Resource Optimization) \\
+\hline
+\end{tabular}
+\end{adjustbox}
+\end{table}
+
+\section{Layer 4 Composite Rules Engine Implementation}
+The composite rule engine evaluates deterministic rule results in conjunction with machine learning risk probabilities and graph motif indicators:
+
+\begin{algorithm}[H]
+\caption{Layer 4 Composite Decisioning Algorithm}
+\begin{algorithmic}[1]
+\REQUIRE Transaction vector $\mathbf{x}$, Rule score $R(\mathbf{x})$, ML risk probability $P(\mathbf{x})$, Motif flag $M(\mathbf{x})$, Contamination score $S_{\text{topo}}(\mathbf{x})$
+\ENSURE Final compliance disposition $D(\mathbf{x})$, SAR draft generation trigger $S_{\text{flag}}$
+\IF{$R(\mathbf{x}) \ge 1 \land M(\mathbf{x}) == 1 \land P(\mathbf{x}) \ge 0.75$}
+    \STATE $D(\mathbf{x}) \leftarrow \text{``TIER-1 CRITICAL ESCALATION''}$
+    \STATE $S_{\text{flag}} \leftarrow \text{TRUE}$
+    \STATE Log urgent audit trail with immediate investigator dispatch.
+\ELSIF{$R(\mathbf{x}) == 1 \land M(\mathbf{x}) == 0 \land P(\mathbf{x}) < 0.15$}
+    \STATE $D(\mathbf{x}) \leftarrow \text{``LOW-RISK FALSE-POSITIVE AUTO-CLEARED''}$
+    \STATE $S_{\text{flag}} \leftarrow \text{FALSE}$
+    \STATE Commit statutory audit justification to immutable log.
+\ELSIF{$P(\mathbf{x}) \ge \tau_{\text{optimal}} \lor S_{\text{topo}}(\mathbf{x}) \ge \tau_{\text{topo}} \lor (R_8(\mathbf{x}) == 1 \land P(\mathbf{x}) \ge 0.40)$}
+    \STATE $D(\mathbf{x}) \leftarrow \text{``SUSPICIOUS TRANSACTION -- STANDARD TRIAGE''}$
+    \STATE $S_{\text{flag}} \leftarrow \text{TRUE}$
+\ELSE
+    \STATE $D(\mathbf{x}) \leftarrow \text{``CLEARED / ROUTINE COMMERCIAL ACTIVITY''}$
+    \STATE $S_{\text{flag}} \leftarrow \text{FALSE}$
+\ENDIF
+\RETURN $D(\mathbf{x}), S_{\text{flag}}$
+\end{algorithmic}
+\end{algorithm}

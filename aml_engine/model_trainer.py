@@ -184,6 +184,8 @@ def _granular_sna_ablation(df_features: pd.DataFrame, y: np.ndarray,
         'No PageRank':    ['source_pagerank', 'target_pagerank', 'terminal_pagerank'],
         'No Betweenness': ['source_betweenness', 'target_betweenness'],
         'No Community':   ['community_id', 'community_size', 'is_cross_community'],
+        'No Clustering':  ['source_clustering_coef', 'target_clustering_coef'],
+        'No FanIn/FanOut':['source_in_degree', 'source_out_degree', 'target_in_degree', 'target_out_degree'],
         'No Motifs':      ['motif_circular', 'motif_smurfing', 'motif_reversal'],
         'No SNA (All)':   SNA_FEATURES,
     }

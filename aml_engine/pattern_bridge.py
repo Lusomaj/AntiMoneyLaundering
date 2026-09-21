@@ -360,6 +360,11 @@ def build_pattern_bridge(df_ibm: pd.DataFrame, df_isw: pd.DataFrame,
         print(f"[PatternBridge] Amount similarity (log-UGX): {amt_sim:.1%} "
               f"[IBM median: {df_ibm['amount'].median():,.0f} UGX | ISW median: {df_isw['amount'].median():,.0f} UGX]")
 
+    # Compute comparisons
+    feat_dist = compare_feature_distributions(df_ibm, df_isw, sna_feature_cols)
+    motif_bridge = compare_motif_counts(ibm_motif_meta, isw_motif_meta, df_ibm, df_isw)
+    graph_bridge = compare_graph_metrics(ibm_sna, isw_sna)
+
     # Overall fingerprint similarity score with bootstrap CI
     sim_scores  = [v.get('similarity', 0) for v in feat_dist.values()]
     graph_sims  = [v.get('structural_similarity', 0) for v in graph_bridge.values()]

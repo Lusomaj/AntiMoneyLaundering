@@ -1,0 +1,179 @@
+\chapter{System Architecture and Implementation} \label{ch:architecture}
+
+\section{Introduction}
+This chapter presents the detailed engineering design and technical implementation of the proposed multi-layer hybrid Anti-Money Laundering framework. While theoretical models often operate under idealized assumptions, production financial switching environments require architectures that are computationally scalable, compliant with regulatory rulebooks, auditable by human compliance officers, and resilient against adversarial evasion.
+
+To reconcile these competing requirements, the system is designed as a \textbf{Four-Layer Hybrid Architecture} (Figure~\ref{fig:four_layer_arch}):
+\begin{enumerate}
+    \item \textbf{Layer 1: Deterministic Hard Rules Engine} (Statutory compliance screening across 14 rules).
+    \item \textbf{Layer 2: Social Network Analysis and Motif Engine} (Graph topology extraction and structural pattern mining).
+    \item \textbf{Layer 3: Predictive Machine Learning and Anomaly Layer} (Dual-engine: Supervised XGBoost ensemble + Unsupervised Topology Isolation Forest).
+    \item \textbf{Layer 4: Composite Decisioning and Explainable AI Engine} (Rule-ML synergy, Tier-1 critical escalations, FP auto-clearing, and automated SAR PDF generation).
+\end{enumerate}
+
+\begin{figure}[hbt!]
+\centering
+\fbox{\parbox{0.95\textwidth}{
+\centering
+\textbf{Incoming Transaction Stream (ISO 8583 / Switch Message)}\\
+$\downarrow$\\
+\fbox{\parbox{0.9\textwidth}{\textbf{LAYER 1: Deterministic Rules Engine (R1--R14)}\\
+Evaluates statutory thresholds, velocity, terminal bursts, card testing, dormant spikes.\\
+\textit{Output:} $\text{rule\_score} \in [0, 14]$, boolean flags.}}\\
+$\downarrow$\\
+\fbox{\parbox{0.9\textwidth}{\textbf{LAYER 2: Graph Analytics \& Motif Engine (NetworkX)}\\
+Constructs $G(V, E, W)$, filters super-hubs, extracts centralities, PageRank, clustering, cycles, smurfing.\\
+\textit{Output:} 19 SNA metrics + 3 Graph Motifs.}}\\
+$\downarrow$\\
+\fbox{\parbox{0.9\textwidth}{\textbf{LAYER 3: Dual Machine Learning \& Anomaly Layer}\\
+$\bullet$ \textbf{Supervised Engine:} XGBoost / Stacked Ensemble $\rightarrow$ Risk probability $P(y=1|\mathbf{x})$.\\
+$\bullet$ \textbf{Unsupervised Engine:} Topology Isolation Forest $\rightarrow$ Amount-invariant anomaly score $S_{\text{topo}}$.}}\\
+$\downarrow$\\
+\fbox{\parbox{0.9\textwidth}{\textbf{LAYER 4: Composite Decisioning \& Explainable AI (XAI)}\\
+$\bullet$ \textbf{RUL-L4-01 (Tier-1 Critical):} Multi-vector alert ($\text{Rule} + \text{Motif} + P \ge 0.75$) $\rightarrow$ Immediate SAR.\\
+$\bullet$ \textbf{RUL-L4-02 (Low-Risk Auto-Clear):} Single breach + Low ML ($P < 0.15$) $\rightarrow$ Auto-cleared.\\
+$\bullet$ \textbf{TreeSHAP Engine:} Attribution waterfall + Natural language narrative + PDF Audit Log.}}
+}}
+\caption{Four-Layer Hybrid Anti-Money Laundering System Architecture.}
+\label{fig:four_layer_arch}
+\end{figure}
+
+\section{Layer 1: Deterministic Hard Rules Engine}
+\subsection{Specification of Hard Rules (R1--R14)}
+Layer 1 implements a high-throughput deterministic rule engine codifying 14 compliance rules derived from the Bank of Uganda regulations, FATF recommendations, and the Interswitch AML Rulebook. Table~\ref{tab:hard_rules_specs} details the complete rule matrix.
+
+\begin{table}[hbt!]
+\centering
+\caption{Layer 1 Complete Deterministic AML Rule Matrix (R1--R14)}
+\label{tab:hard_rules_specs}
+\begin{adjustbox}{width=\textwidth,center=\textwidth}
+\begin{tabular}{|l|l|p{6.5cm}|p{4.2cm}|}
+\hline
+\rowcolor{gray!40}
+\textbf{Rule ID} & \textbf{Rule Name} & \textbf{Operational Logic and Mathematical Trigger} & \textbf{Regulatory / Typological Intent} \\
+\hline
+\textbf{R1} & Large Amount Threshold & $\text{Amount} \ge 10,000,000\text{ UGX}$ (or $\ge \$5,000\text{ USD}$) & Mandatory CTR statutory reporting limit. \\
+\hline
+\textbf{R2} & High-Risk Transaction Type & $\text{tran\_type} \in \{\text{TRANSFER}, \text{CASH\_OUT}, \text{REVERSAL}\}$ & Scrutinizes high-liquidity transfer channels. \\
+\hline
+\textbf{R3} & Rapid Reversal & $\text{motif\_reversal} == 1$ within 2 hours & Detects transaction cancellation laundering. \\
+\hline
+\textbf{R4} & Smurfing Fan-Out & $\text{motif\_smurfing} == 1$ ($\ge 3$ beneficiaries within 24h) & Identifies structured placement and disbursement. \\
+\hline
+\textbf{R5} & Circular Flow & $\text{motif\_circular} == 1$ (directed cycle $A \rightarrow \dots \rightarrow A$) & Uncovers complex layering cycles. \\
+\hline
+\textbf{R6} & Velocity Burst & $\text{tx\_count\_last\_step} \ge 10$ transactions per hour & Flags automated bot bursts or rapid carding. \\
+\hline
+\textbf{R7} & Terminal Source Burst & $\text{nunique}(\text{source} \mid \text{terminal}, \text{step}) \ge 20$ cards & Identifies compromised mule POS/ATM terminals. \\
+\hline
+\textbf{R8} & Structuring Evasion & $\text{count}(\text{source}) \ge 2$ with $\text{Amount} \in [9.0\text{M}, 10.0\text{M})\text{ UGX}$ & Catches launderers operating just below R1. \\
+\hline
+\textbf{R9} & Passthrough Conduit & $\text{motif\_passthrough} == 1$ ($V_{\text{out}} / V_{\text{in}} \approx 1.0$) & Identifies transit accounts with zero float. \\
+\hline
+\textbf{R10} & Mule Terminal Multi-Card & $\ge 5$ distinct card sources on same terminal within step & Detects mule syndicates cashing out at single agent. \\
+\hline
+\textbf{R11} & Card Testing & $\ge 3$ failed authorization responses on same source & Detects brute-force card probing. \\
+\hline
+\textbf{R12} & Off-Peak High-Value & $\text{hour} \in [0, 5]\text{ AM} \land \text{Amount} \ge 5,000,000\text{ UGX}$ & Flags anomalous night-time liquidation. \\
+\hline
+\textbf{R13} & High-Risk Currency & $\text{currency} \in \{\text{USD}, \text{EUR}, \text{GBP}, \text{KES}\}$ & Flags foreign exchange cross-border flight. \\
+\hline
+\textbf{R14} & Dormant Account Spike & $\text{time\_since\_last\_tx} \ge 90\text{ steps} \land \text{Amount} \ge 5 \times \bar{W}_{\text{hist}}$ & Detects reactivation of sleeping mule accounts. \\
+\hline
+\end{tabular}
+\end{adjustbox}
+\end{table}
+
+\subsection{Rule Engine Execution Logic}
+The engine evaluates each transaction row against the 14 rules in parallel, producing:
+\begin{equation}
+    \text{rule\_score} = \sum_{k=1}^{14} R_k(\mathbf{x}) \in [0, 14], \quad \text{rule\_triggered} = \mathbb{I}(\text{rule\_score} \ge 1)
+\end{equation}
+Transactions with $\text{rule\_triggered} = 1$ traditionally form the alert queue; in our hybrid system, they pass to subsequent layers for contextual filtering and risk escalation.
+
+\section{Layer 2: Graph Analytics and Motif Engine}
+\subsection{NetworkX Graph Builder Implementation}
+Layer 2 constructs and maintains the financial transaction multigraph using NetworkX. Nodes represent accounts, mobile wallets, and POS/ATM terminal hardware. Edges represent directed money flows annotated with amounts and timestamps.
+
+\subsection{Super-Hub Optimization}
+To prevent exponential scaling during local clustering coefficient calculations ($O(d^2)$ per node), Layer 2 partitions nodes dynamically:
+\begin{equation}
+    G_{\text{account}} = G[V \setminus V_{\text{infrastructure}}]
+\end{equation}
+Infrastructure nodes (clearing switches and virtual bank aggregators) are retained for degree and PageRank calculations but excluded from local triad enumeration. This optimization ensures real-time graph construction in under 2 seconds for 300,000 transactions.
+
+\subsection{Motif Mining Algorithms}
+The motif engine executes three specialized graph traversal algorithms:
+\begin{enumerate}
+    \item \textbf{Circular Flow Detector:} Performs depth-first cycle detection bounded at length $k \in [3, 5]$ with temporal path monotonicity ($t_1 \le t_2 \le \dots \le t_k$).
+    \item \textbf{Smurfing Fan-In/Fan-Out Miner:} Monitors bipartite node neighborhoods to flag high-degree ratio imbalances ($\text{deg}_{\text{in}} / \text{deg}_{\text{out}} \ge 5$ or $\le 0.2$) coupled with short inter-arrival times.
+    \item \textbf{Rapid Reversal Identifier:} Maintains a rolling hash table of $(u, v, \text{amount}, t)$ tuples to flag matching reciprocal flows within 120 minutes.
+\end{enumerate}
+Extracted node metrics and motif flags are serialized into high-performance dictionaries (\texttt{sna\_features.pkl} and \texttt{motif\_metadata.pkl}) and mapped back to transaction rows.
+
+\section{Layer 3: Predictive Machine Learning and Anomaly Layer}
+Layer 3 constitutes the predictive core of the architecture, featuring a dual-engine design combining supervised risk estimation with unsupervised topological anomaly detection.
+
+\subsection{Supervised Prediction Engine (XGBoost / Stacked Ensemble)}
+The supervised engine processes the 38-dimensional feature vector $\mathbf{x}$ to compute a continuous laundering risk probability:
+\begin{equation}
+    P(y=1 \mid \mathbf{x}) \in [0, 1]
+\end{equation}
+The engine deploys a tuned XGBoost classifier trained on the IBM gold-standard benchmark. For maximum robustness across varied data regimes, a Stacked Ensemble is also provided, utilizing Logistic Regression to combine out-of-fold probability estimates from Random Forest and XGBoost base estimators:
+\begin{equation}
+    P_{\text{stacked}} = \sigma\left( w_1 P_{\text{RF}}(\mathbf{x}) + w_2 P_{\text{XGB}}(\mathbf{x}) + b \right)
+\end{equation}
+
+\subsection{Unsupervised Topology Isolation Forest}
+To protect against adversarial amount manipulation where supervised models fail due to un-warmed cold-start accounts, Layer 3 incorporates an unsupervised \textbf{Topology Isolation Forest} (\texttt{TopologyIsolationForest}).
+\begin{itemize}
+    \item \textbf{Feature Scope:} Trained exclusively on 14 non-monetary graph topology and velocity features:
+    \begin{align*}
+        \mathbf{X}_{\text{topo}} = [&\text{source\_degree\_cent}, \text{target\_degree\_cent}, \text{source\_pagerank}, \text{target\_pagerank}, \\
+        &\text{is\_cross\_community}, \text{source\_in\_degree}, \text{source\_out\_degree}, \text{target\_in\_degree}, \\
+        &\text{target\_out\_degree}, \text{source\_flow\_through\_ratio}, \text{source\_clustering\_coef}, \\
+        &\text{target\_clustering\_coef}, \text{time\_since\_last\_tx}, \text{tx\_count\_last\_step}]
+    \end{align*}
+    \item \textbf{Scoring and Thresholding:} Computes normalized path-length anomaly scores $S_{\text{topo}}(\mathbf{x}) \in [0, 1]$ calibrated at a 97th-percentile contamination threshold ($\tau_{\text{topo}} = 0.5825$).
+    \item \textbf{Amount Invariance:} Evaluates network anomalies with zero sensitivity to monetary amounts, providing a vital safety net against structured smurfing.
+\end{itemize}
+
+\section{Layer 4: Composite Decisioning and Explainability Engine}
+Layer 4 bridges algorithmic predictions with statutory compliance operations. Rather than relying solely on raw probability thresholds, Layer 4 executes composite rules that synthesize deterministic rule triggers with machine learning confidence.
+
+\subsection{Composite Rule RUL-L4-01: Tier-1 Critical Escalation}
+Identifies high-certainty, multi-vector money laundering operations requiring immediate manual investigation:
+\begin{equation}
+    \text{Tier-1 Critical} = \mathbb{I}\left( \text{rule\_score} \ge 1 \land \text{motif\_detected} == 1 \land P(y=1|\mathbf{x}) \ge 0.75 \right)
+\end{equation}
+When triggered, the transaction bypasses standard triaging queues, generates an immediate automated SAR draft, and alerts senior compliance officers. In field testing on Interswitch data, this rule isolated \textbf{1,802 high-certainty transactions}.
+
+\subsection{Composite Rule RUL-L4-02: Low-Risk False-Positive Auto-Clear}
+Directly targets alert fatigue by auto-clearing spurious, single-threshold breaches:
+\begin{equation}
+    \text{Auto-Clear} = \mathbb{I}\left( \text{rule\_score} == 1 \land \text{motif\_detected} == 0 \land P(y=1|\mathbf{x}) < 0.15 \right)
+\end{equation}
+Transactions meeting this condition represent routine commercial activities (e.g., a benign single-threshold breach with zero behavioral or graph anomalies). The system logs an automated audit clearance disposition with statutory audit trails, eliminating human review overhead.
+
+\subsection{TreeSHAP Explainability and Automated SAR Generation}
+For every flagged alert, Layer 4 executes TreeSHAP to compute exact local attributions $\phi_i(\mathbf{x})$. As implemented in \texttt{sar\_generator.py}, the engine automatically synthesizes:
+\begin{enumerate}
+    \item \textbf{Structured Narrative Summary:} Translates top-ranked SHAP features into clear investigative prose (e.g., ``Suspicion established based on abnormal historical transaction burst ($\text{hist\_tx\_count} = 14$, $\phi = +6.10$) and cross-community funds transfer ($\phi = +2.46$)'').
+    \item \textbf{Waterfall Chart Generation:} Visualizes positive and negative feature pushes relative to the baseline expected value.
+    \item \textbf{Court-Admissible PDF SAR Generation:} Compiles a multi-page compliance document containing transaction metadata, customer PAN masks, terminal locations, rule violations, SHAP attribution tables, and investigator sign-off fields.
+\end{enumerate}
+
+\section{Operational Interface: Streamlit Compliance Dashboard}
+The framework is exposed to compliance officers and regulators through an interactive, multi-tab Streamlit dashboard (\texttt{app/dashboard.py}). The dashboard features seven dedicated operational modules:
+\begin{enumerate}
+    \item \textbf{Executive Overview:} Real-time operational gauges for False Positive Reduction, Inference Latency, XAI Coverage, and alert volume statistics.
+    \item \textbf{Alert Queue and Triage:} Interactive, paginated triage table supporting one-click SAR generation, disposition tagging (Confirmed Suspicion, False Positive, Auto-Cleared), and risk score filtering.
+    \item \textbf{Graph Network Forensics:} Visual interactive subgraphs rendering ego-networks around suspicious accounts, color-coding nodes by community modularity, and highlighting circular laundering loops.
+    \item \textbf{Model Performance and Ablation:} Live comparative charts rendering AUPRC, ROC curves, confusion matrices, and granular SNA ablation drops.
+    \item \textbf{Cross-Dataset Pattern Bridge:} Statistical distribution plots comparing IBM and Interswitch feature distributions with Mann-Whitney $U$ significance and Bootstrap CIs.
+    \item \textbf{Explainability and SAR Generation:} On-demand local TreeSHAP waterfall charts, global feature importance rankings, and one-click PDF export.
+    \item \textbf{Defense and Compliance Checklist:} Comprehensive compliance audit checklist linking system metrics to FATF and Bank of Uganda regulatory articles.
+\end{enumerate}
+
+\section{Summary}
+This chapter detailed the complete system architecture and implementation of the four-layer hybrid AML framework. By systematically integrating deterministic rules, super-hub optimized graph analytics, dual supervised/unsupervised machine learning, composite Layer-4 decisioning, and automated SAR generation, the architecture delivers an end-to-end, production-ready solution tailored to high-velocity payment switches in Sub-Saharan Africa.

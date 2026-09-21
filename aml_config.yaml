@@ -74,6 +74,27 @@ hard_rules:
   velocity_max_tx_per_hour: 10
   circular_flow_max_depth: 4
   terminal_high_tx_threshold: 50
+  structuring_threshold_percent: 0.90
+  structuring_tx_window_hours: 24
+  structuring_min_count: 2
+  passthrough_window_hours: 12
+  passthrough_retention_max_percent: 5
+  terminal_max_unique_cards_per_day: 5
+  max_failed_tx_window_minutes: 30
+  max_failed_tx_count: 3
+  off_peak_hours:
+  - 0
+  - 1
+  - 2
+  - 3
+  - 4
+  - 5
+  off_peak_amount_multiplier: 0.5
+  high_risk_currencies:
+  - RUB
+  - IRR
+  - KPW
+  - SYP
 super_node:
   card_col: encryptedCard
   account_col: from_account_id

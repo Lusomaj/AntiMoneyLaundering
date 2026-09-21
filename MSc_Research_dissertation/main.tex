@@ -1,0 +1,304 @@
+% ==============================================================================
+% MAKERERE UNIVERSITY - DIRECTORATE OF RESEARCH AND GRADUATE TRAINING (DRGT)
+% GUIDELINES FOR THE FORMAT OF RESEARCH PROPOSALS, RESEARCH REPORTS, THESIS AND DISSERTATIONS (VER. 4, MARCH 2011)
+% 
+% DISSERTATION TITLE:
+% LEVERAGING EXPLAINABLE MACHINE LEARNING ALGORITHMS AND SOCIAL NETWORK ANALYSIS
+% FOR DETECTING MONEY LAUNDERING PATTERNS IN FINANCIAL TRANSACTIONS
+%
+% CANDIDATE: JOSEPH LUSOMA
+% REGISTRATION NUMBER: 2022/HD05/1194U
+% STUDENT NUMBER: 2200701194
+% DEGREE: MASTER OF SCIENCE IN COMPUTER SCIENCE
+% DEPARTMENT: DEPARTMENT OF COMPUTER SCIENCE
+% SCHOOL: SCHOOL OF COMPUTING AND INFORMATICS TECHNOLOGY
+% COLLEGE: COLLEGE OF COMPUTING AND INFORMATION SCIENCES
+% ==============================================================================
+
+\documentclass[a4paper,12pt]{report}
+
+% --- DRGT Layout and Typography Requirements (Section 6.0) -------------------
+% Margins: 1 inch (2.54 cm) on all four sides of A4 paper
+\usepackage[a4paper,top=1in,bottom=1in,left=1in,right=1in]{geometry}
+
+% Font: Times New Roman 12pt throughout
+\usepackage{newtxtext,newtxmath}
+
+% Line Spacing: 1.5 throughout (Section 6.0, Page 20)
+\usepackage{setspace}
+\onehalfspacing
+
+% Page Numbering: Lower center position throughout (Section 6.0, Page 19)
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyfoot[C]{\thepage}
+\renewcommand{\headrulewidth}{0pt}
+\renewcommand{\footrulewidth}{0pt}
+
+% Ensure plain style (used by chapter starts) also puts page number in lower center
+\fancypagestyle{plain}{
+    \fancyhf{}
+    \fancyfoot[C]{\thepage}
+    \renewcommand{\headrulewidth}{0pt}
+    \renewcommand{\footrulewidth}{0pt}
+}
+
+% --- Captions and Tables Formatting (DRGT Page 20) ----------------------------
+% Table caption at TOP, Figure caption at BOTTOM, bold captions, size 11 notes
+\usepackage[labelfont=bf,textfont=bf,font=small]{caption}
+\captionsetup[table]{position=top,skip=6pt}
+\captionsetup[figure]{position=bottom,skip=6pt}
+
+\usepackage{amsmath}
+\let\Bbbk\relax
+\usepackage{amssymb,amsfonts}
+\usepackage{algorithm}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{placeins}
+\usepackage{multirow}
+\usepackage{array}
+\usepackage{longtable}
+\usepackage{booktabs}
+\usepackage{adjustbox}
+\usepackage{diagbox}
+\usepackage{rotating}
+\usepackage[table]{xcolor}
+\usepackage{tcolorbox}
+\usepackage{float}
+\usepackage{comment}
+
+% --- Heading Hierarchy (DRGT Section 7.0) -------------------------------------
+\usepackage{titlesec}
+\setcounter{secnumdepth}{4}
+\titleformat{\paragraph}{\normalfont\normalsize\bfseries}{\theparagraph}{1em}{}
+\titlespacing*{\paragraph}{0pt}{3.25ex plus 1ex minus .2ex}{1.5ex plus .2ex}
+
+% --- Hyperlink Navigation -----------------------------------------------------
+\usepackage{hyperref}
+\hypersetup{
+    pdftitle={MSc Dissertation - Joseph Lusoma},
+    pdfauthor={Joseph Lusoma},
+    pdfsubject={Leveraging Explainable Machine Learning Algorithms and Social Network Analysis for Detecting Money Laundering Patterns in Financial Transactions},
+    colorlinks=true,
+    citecolor=blue!70!black,
+    linkcolor=black,
+    urlcolor=blue!70!black
+}
+
+% --- Table of Contents and Appendices -----------------------------------------
+\usepackage{tocloft}
+\usepackage[page,toc,titletoc,title]{appendix}
+
+\newcolumntype{P}[1]{>{\centering\arraybackslash}p{#1}}
+
+\begin{document}
+
+% ==============================================================================
+% PRELIMINARIES (DRGT Section 5.0, Pages 10--15)
+% Paginated in lower Roman numerals (i, ii, iii...). Title page is UNNUMBERED.
+% ==============================================================================
+
+% ------------------------------------------------------------------------------
+% (i) TITLE PAGE (Unnumbered, All information centered, DRGT Page 11--13)
+% ------------------------------------------------------------------------------
+\begin{titlepage}
+\begin{center}
+{\Large \textbf{MAKERERE UNIVERSITY}}\\[0.25in]
+\includegraphics[width=0.22\textwidth]{images/Logo.png}\\[0.35in]
+
+{\Large \bfseries LEVERAGING EXPLAINABLE MACHINE LEARNING ALGORITHMS AND SOCIAL NETWORK ANALYSIS FOR DETECTING MONEY LAUNDERING PATTERNS IN FINANCIAL TRANSACTIONS}\\[0.45in]
+
+{\normalsize \textbf{BY}}\\[0.2in]
+
+{\large \bfseries JOSEPH LUSOMA}\\[0.1in]
+{\normalsize Registration No: \textbf{2022/HD05/1194U}}\\
+{\normalsize Student No: \textbf{2200701194}}\\[0.5in]
+
+{\normalsize \bfseries A DISSERTATION SUBMITTED TO THE DIRECTORATE OF RESEARCH AND GRADUATE TRAINING IN PARTIAL FULFILMENT OF THE REQUIREMENTS FOR THE AWARD OF THE DEGREE OF MASTER OF SCIENCE IN COMPUTER SCIENCE OF MAKERERE UNIVERSITY}\\[0.6in]
+
+\vfill
+{\large \bfseries SEPTEMBER 2026}
+\end{center}
+\end{titlepage}
+
+% Starting preliminary Roman page numbering from Declaration (DRGT Page 10 & 14)
+\pagenumbering{roman}
+\setcounter{page}{1}
+
+% ------------------------------------------------------------------------------
+% (ii) DECLARATION (DRGT Section 5.0(a)(ii) & Section 5.1(ii), Page 11 & 14)
+% ------------------------------------------------------------------------------
+\newpage
+\chapter*{Declaration}
+\addcontentsline{toc}{chapter}{Declaration}
+I, \textbf{Joseph Lusoma}, declare that this study is original and has not been submitted for any other degree award to any other University before.
+
+\vspace{3.5em}
+\noindent
+\begin{tabular}{@{}p{8.5cm}p{6.5cm}@{}}
+\textbf{Candidate Signature:} \dotfill & \textbf{Date:} \dotfill \\
+\textbf{Joseph Lusoma} & \\
+Reg. No: $2022/\text{HD}05/1194\text{U}$ & \\
+Student No: $2200701194$ & \\
+\end{tabular}
+
+% ------------------------------------------------------------------------------
+% APPROVAL BY SUPERVISORS (DRGT Section 5.1(ii), Page 11 & 14)
+% ------------------------------------------------------------------------------
+\newpage
+\chapter*{Approval}
+\addcontentsline{toc}{chapter}{Approval}
+This dissertation has been submitted for examination with the approval of the following supervisors:
+
+\vspace{2.5em}
+\noindent
+\textbf{1. Prof. Engineer Bainomugisha, PhD}\\
+Department of Computer Science,\\
+School of Computing and Informatics Technology, Makerere University.\\
+Signature: \dotfill \quad Date: \dotfill
+
+\vspace{2.5em}
+\noindent
+\textbf{2. Dr. Marriette Katarahweire, PhD}\\
+Department of Computer Science,\\
+School of Computing and Informatics Technology, Makerere University.\\
+Signature: \dotfill \quad Date: \dotfill
+
+\vspace{2.5em}
+\noindent
+\textbf{3. Mr. Denish Azamuke, MSc}\\
+Department of Computer Science,\\
+School of Computing and Informatics Technology, Makerere University.\\
+Signature: \dotfill \quad Date: \dotfill
+
+% ------------------------------------------------------------------------------
+% (iii) COPYRIGHT STATEMENT (DRGT Section 5.0(a)(iii) & Section 5.1(ii), Page 10 & 14)
+% ------------------------------------------------------------------------------
+\newpage
+\chapter*{Copyright}
+\addcontentsline{toc}{chapter}{Copyright}
+\vspace*{4cm}
+\begin{center}
+Copyright Reserved by the author, Represented by \copyright\ 2026 Joseph Lusoma.\\[1.5em]
+All rights reserved. No part of this dissertation may be reproduced, stored in a retrieval system, or transmitted in any form or by any means, electronic, mechanical, photocopying, recording, or otherwise, without prior written permission of the author or Makerere University.
+\end{center}
+
+% ------------------------------------------------------------------------------
+% (iv) DEDICATION (DRGT Section 5.0(a)(iv), Page 10 & 14)
+% ------------------------------------------------------------------------------
+\newpage
+\chapter*{Dedication}
+\addcontentsline{toc}{chapter}{Dedication}
+\begin{center}
+\vspace*{3.5cm}
+\emph{To my beloved family, whose steadfast sacrifices, prayers, and boundless encouragement have been the bedrock of my academic pursuit.}\\
+\vspace{2cm}
+\emph{And to all dedicated financial intelligence analysts, compliance officers, and forensic investigators striving tirelessly to safeguard the integrity of developing financial systems across Sub-Saharan Africa.}
+\end{center}
+
+% ------------------------------------------------------------------------------
+% (v) ACKNOWLEDGEMENT (DRGT Section 5.0(a)(v), Page 10 & 14)
+% ------------------------------------------------------------------------------
+\newpage
+\chapter*{Acknowledgement}
+\addcontentsline{toc}{chapter}{Acknowledgement}
+First and foremost, I offer my profound gratitude to the Almighty God for granting me health, wisdom, perseverance, and intellectual discernment throughout the course of this Master of Science research.
+
+I express my deepest academic and personal gratitude to my supervisors: \textbf{Prof. Engineer Bainomugisha}, \textbf{Dr. Marriette Katarahweire}, and \textbf{Mr. Denish Azamuke}. Their rigorous methodological critique, technical guidance, visionary encouragement, and generous dedication of time shaped this research from an initial concept into a comprehensive, publication-grade dissertation.
+
+I extend sincere appreciation to the faculty and technical staff of the \textbf{Department of Computer Science} and the \textbf{School of Computing and Informatics Technology (SCIT)}, Makerere University, for fostering an enriching research environment. Special thanks are due to the \textbf{Directorate of Research and Graduate Training (DRGT)} for administrative oversight, research guidance, and institutional support.
+
+I am profoundly indebted to the technical team and compliance leadership at \textbf{Interswitch Uganda} for providing real-world payment switch data access, domain expertise, and operational insights into electronic payment switches and agency banking topologies. Their collaboration provided the vital bridge connecting theoretical machine learning with authentic operational banking systems.
+
+Finally, my deepest appreciation goes to my parents, siblings, academic peers, and friends whose enduring love, moral support, and patience sustained me across every phase of this scholarly journey.
+
+% ------------------------------------------------------------------------------
+% (vi) TABLE OF CONTENTS (DRGT Section 5.0(a)(vi), Page 10 & 14)
+% ------------------------------------------------------------------------------
+\newpage
+\tableofcontents
+
+% ------------------------------------------------------------------------------
+% (vii) LIST OF TABLES (DRGT Section 5.0(a)(vii), Page 10 & 14)
+% ------------------------------------------------------------------------------
+\newpage
+\listoftables
+\addcontentsline{toc}{chapter}{List of Tables}
+
+% ------------------------------------------------------------------------------
+% (viii) LIST OF FIGURES / ILLUSTRATIONS (DRGT Section 5.0(a)(viii), Page 10 & 14)
+% ------------------------------------------------------------------------------
+\newpage
+\listoffigures
+\addcontentsline{toc}{chapter}{List of Figures}
+
+% ------------------------------------------------------------------------------
+% (ix) LIST OF ABBREVIATIONS / ACRONYMS (DRGT Section 5.0(a)(ix), Page 10 & 14)
+% ------------------------------------------------------------------------------
+\newpage
+\input{abbrev.tex}
+
+% ------------------------------------------------------------------------------
+% (x) ABSTRACT (DRGT Section 5.0(a)(x) & Section 5.1(x), Page 10, 12, 15)
+% Placed as final preliminary section, preferably <= 300 words.
+% ------------------------------------------------------------------------------
+\newpage
+\chapter*{Abstract}
+\addcontentsline{toc}{chapter}{Abstract}
+Money laundering imposes severe socio-economic distress across Sub-Saharan Africa, distorting market allocations and depriving developing economies of vital capital. Traditional Anti-Money Laundering (AML) monitoring systems, reliant on static deterministic rulebooks, have catastrophically failed in modern digital payment ecosystems---generating false-positive rates exceeding 95\%, causing severe investigator alert fatigue, and remaining blind to sophisticated relational typologies such as circular layering and micro-amount structuring across agency banking networks. Conversely, standalone high-capacity machine learning models operate as opaque black boxes that fail to satisfy statutory Suspicious Activity Report (SAR) filing mandates under Financial Action Task Force (FATF) standards, while also suffering from cold-start adversarial vulnerabilities when launderers operate just below learned amount thresholds.
+
+This dissertation presents the design, implementation, and empirical evaluation of a novel \textbf{Four-Layer Hybrid AML Framework} that synergistically couples deterministic compliance rules, Social Network Analysis (SNA), dual-engine predictive machine learning, and game-theoretic Explainable Artificial Intelligence (XAI). The architecture integrates 14 deterministic rules (Layer 1), super-hub optimized NetworkX graph analytics and motif discovery (Layer 2), an ensemble machine learning layer combining tuned XGBoost and an unsupervised amount-invariant Topology Isolation Forest (Layer 3), and an operational Layer-4 composite decision engine delivering automated, court-admissible SAR generation.
+
+Empirical evaluation was conducted across two extensive experimental domains: (i) supervised benchmarking and granular ablation on the gold-standard IBM Transactions for AML (HI-Large) benchmark (562,376 transactions), and (ii) cross-domain statistical bridging and operational field testing on 300,000 live payment switch transactions from Interswitch Uganda. On the IBM benchmark, the hybrid XGBoost+SNA model achieved an exceptional Area Under the Precision-Recall Curve (\textbf{AUPRC}) of \textbf{0.9015}, an \textbf{F1-score of 0.7152}, and a \textbf{Recall of 96.26\%} (ROC-AUC 0.9837), significantly outperforming published Graph Convolutional Network (GCN) baselines. An exhaustive granular ablation study proved that topological graph features contribute an indispensable \textbf{+9.00\% absolute AUPRC lift} over tabular features alone ($p < 0.001$). 
+
+In real-world field testing on 300,000 Interswitch transactions, the system met all pre-registered operational Key Performance Indicators: achieving an outstanding \textbf{99.51\% False Positive Reduction Rate}, an ultra-low inference latency of \textbf{1.71 ms per 100 transactions}, and \textbf{65.45\% TreeSHAP explainability coverage}. Furthermore, criminological analysis resolved the CTR versus SAR dichotomy in African cash-intensive banking, identified 78,953 micro-smurfing motifs (median 52,929 UGX), and confirmed that the Topology Isolation Forest neutralizes structured adversarial evasion. The study recommends regulatory adoption of graph-augmented machine learning architectures across payment switches and commercial banks.
+
+% ==============================================================================
+% BODY OF THE DISSERTATION (ARABIC NUMERALS, DRGT Section 5.0(b), Pages 10 & 15)
+% ==============================================================================
+\newpage
+\pagenumbering{arabic}
+\setcounter{page}{1}
+
+% Chapter 1: Introduction
+\input{chapters/ch1_introduction.tex}
+
+% Chapter 2: Literature Review and Theoretical Framework
+\input{chapters/ch2_literature_review.tex}
+
+% Chapter 3: Research Methodology
+\input{chapters/ch3_methodology.tex}
+
+% Chapter 4: System Architecture and Implementation
+\input{chapters/ch4_system_architecture.tex}
+
+% Chapter 5: Presentation and Interpretation of Results
+\input{chapters/ch5_results_and_evaluation.tex}
+
+% Chapter 6: Discussion of Findings and Operational Implications
+\input{chapters/ch6_discussion_and_adversarial.tex}
+
+% Chapter 7: Conclusions and Recommendations
+\input{chapters/ch7_conclusion.tex}
+
+% ==============================================================================
+% REFERENCES (DRGT Section 5.3 & 5.4, Pages 13 & 20--22)
+% ==============================================================================
+\newpage
+\addcontentsline{toc}{chapter}{References}
+\bibliographystyle{IEEEtran}
+\bibliography{Library_for_Automatic_References}
+
+% ==============================================================================
+% APPENDICES (DRGT Section 5.5, Pages 10, 11 & 13)
+% ==============================================================================
+\newpage
+\begin{appendices}
+\input{appendices/appendix_feature_dictionary.tex}
+\input{appendices/appendix_rulebook_specs.tex}
+\input{appendices/appendix_sar_sample.tex}
+\end{appendices}
+
+\end{document}

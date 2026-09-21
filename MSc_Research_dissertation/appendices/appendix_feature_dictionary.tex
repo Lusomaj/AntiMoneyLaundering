@@ -1,0 +1,178 @@
+% ==============================================================================
+% APPENDIX A: COMPLETE 38-FEATURE ENGINEERING DICTIONARY
+% ==============================================================================
+\chapter{Complete 38-Feature Engineering Dictionary} \label{app:feature_dict}
+
+This appendix provides the formal mathematical definitions, variable data types, extraction scopes, and criminological interpretations for all 38 features engineered within the hybrid Anti-Money Laundering framework.
+
+\section{Tabular Financial Transaction Features}
+\begingroup
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{longtable}{|p{3.5cm}|p{1.5cm}|p{5.1cm}|p{4.2cm}|}
+\hline
+\rowcolor{gray!40}
+\textbf{Feature Name} & \textbf{Type} & \textbf{Mathematical Definition / Logic} & \textbf{Investigative Relevance} \\
+\hline
+\endfirsthead
+\hline
+\rowcolor{gray!40}
+\textbf{Feature Name} & \textbf{Type} & \textbf{Mathematical Definition / Logic} & \textbf{Investigative Relevance} \\
+\hline
+\endhead
+\hline
+\endfoot
+\hline
+\endlastfoot
+\path{amount} & Float & Raw monetary transaction amount normalized to UGX. & Base financial magnitude of transfer. \\
+\hline
+\path{amount_log} & Float & $\ln(1.0 + \text{amount})$ & Compresses exponential monetary skew into normal distribution. \\
+\hline
+\path{is_small_amount} & Binary & $\mathbb{I}(\text{amount} < 50,000\text{ UGX})$ & Detects micro-probing and smurfing tranches. \\
+\hline
+\path{is_large_amount} & Binary & $\mathbb{I}(\text{amount} \ge 10,000,000\text{ UGX})$ & Identifies statutory CTR threshold breaches. \\
+\hline
+\path{isWithdrawTrx} & Binary & $\mathbb{I}(\text{tran\_type} \in \{\text{WITHDRAWAL}, \text{CASH\_OUT}\})$ & Identifies physical cash liquidation events. \\
+\hline
+\path{isTransferTrx} & Binary & $\mathbb{I}(\text{tran\_type} \in \{\text{TRANSFER}, \text{DEBIT}\})$ & Identifies account-to-account transit hops. \\
+\hline
+\path{isRefundTrx} & Binary & $\mathbb{I}(\text{tran\_type} == \text{REFUND})$ & Scrutinizes potential refund laundering schemes. \\
+\hline
+\path{isDepositTrx} & Binary & $\mathbb{I}(\text{tran\_type} \in \{\text{DEPOSIT}, \text{CASH\_IN}\})$ & Identifies cash placement into formal banking float. \\
+\hline
+\path{isPurchaseTrx} & Binary & $\mathbb{I}(\text{tran\_type} == \text{PURCHASE})$ & Differentiates commercial merchant checkout volume. \\
+\hline
+\path{tran_type_encoded} & Categorical & Integer mapping $\in [0, 10]$ of ISO 8583 processing codes. & Encodes distinct financial operation modalities. \\
+\hline
+\end{longtable}
+\endgroup
+
+\section{Graph Topology and Social Network Analysis (SNA) Features}
+\begingroup
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{longtable}{|p{3.5cm}|p{1.5cm}|p{5.1cm}|p{4.2cm}|}
+\hline
+\rowcolor{gray!40}
+\textbf{Feature Name} & \textbf{Type} & \textbf{Mathematical Definition / Logic} & \textbf{Investigative Relevance} \\
+\hline
+\endfirsthead
+\hline
+\rowcolor{gray!40}
+\textbf{Feature Name} & \textbf{Type} & \textbf{Mathematical Definition / Logic} & \textbf{Investigative Relevance} \\
+\hline
+\endhead
+\hline
+\endfoot
+\hline
+\endlastfoot
+\path{source_degree_cent} & Float & Degree centrality of source account: $k_{\text{src}} / (|V|-1)$. & Overall connectivity and activity footprint. \\
+\hline
+\path{target_degree_cent} & Float & Degree centrality of target entity: $k_{\text{tgt}} / (|V|-1)$. & Broad reach and recipient account popularity. \\
+\hline
+\path{source_betweenness} & Float & Brandes' shortest-path betweenness score for source. & Critical broker / bridge role in transaction paths. \\
+\hline
+\path{target_betweenness} & Float & Shortest-path betweenness centrality for target. & Gatekeeper status connecting distinct subgraphs. \\
+\hline
+\path{source_pagerank} & Float & Stationary random-walk probability distribution of source. & Systemic influence and capital accumulation status. \\
+\hline
+\path{target_pagerank} & Float & Stationary PageRank score of recipient node. & Identifies central conduit accounts and sinks. \\
+\hline
+\path{terminal_pagerank} & Float & PageRank centrality of the physical ATM/POS terminal. & Exposes high-risk or compromised terminal hubs. \\
+\hline
+\path{community_id} & Integer & Louvain modularity community index of source: $c(u)$. & Identifies dense organic customer cliques. \\
+\hline
+\path{community_size} & Integer & Total node count in source's community: $|C_{c(u)}|$. & Differentiates tight syndicates from large hubs. \\
+\hline
+\path{is_cross_community} & Binary & $\mathbb{I}(c(\text{source}) \neq c(\text{target}))$ & Flags cross-network funds dispersal (structuring). \\
+\hline
+\path{source_is_infrastructure} & Binary & $\mathbb{I}(\text{source} \in V_{\text{infrastructure}})$ & Isolates clearing gateways and settlement switches. \\
+\hline
+\path{target_is_infrastructure} & Binary & $\mathbb{I}(\text{target} \in V_{\text{infrastructure}})$ & Distinguishes utility sinks from private wallets. \\
+\hline
+\path{source_in_degree} & Integer & $|\{u \in V \mid (u, \text{src}) \in E\}|$ & Fan-in smurfing collection indicator. \\
+\hline
+\path{source_out_degree} & Integer & $|\{u \in V \mid (\text{src}, u) \in E\}|$ & Fan-out smurfing distribution indicator. \\
+\hline
+\path{target_in_degree} & Integer & $|\{u \in V \mid (u, \text{tgt}) \in E\}|$ & Aggregator recipient connectivity count. \\
+\hline
+\path{target_out_degree} & Integer & $|\{u \in V \mid (\text{tgt}, u) \in E\}|$ & Downstream disbursement connectivity. \\
+\hline
+\path{source_clustering_coef} & Float & Triad edge density in source's local neighborhood. & Detects collusive rings and syndicate cliques. \\
+\hline
+\path{target_clustering_coef} & Float & Triad edge density in target's local neighborhood. & Density of connections around destination node. \\
+\hline
+\path{source_flow_through_ratio} & Float & $\frac{\sum W(\text{src}, u)}{\sum W(u, \text{src}) + 1.0} = \frac{V_{\text{out}}}{V_{\text{in}} + 1.0}$ & Identifies transit accounts with zero capital retention. \\
+\hline
+\end{longtable}
+\endgroup
+
+\section{Temporal Velocity and Dormancy Indicators}
+\begingroup
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{longtable}{|p{3.5cm}|p{1.5cm}|p{5.1cm}|p{4.2cm}|}
+\hline
+\rowcolor{gray!40}
+\textbf{Feature Name} & \textbf{Type} & \textbf{Mathematical Definition / Logic} & \textbf{Investigative Relevance} \\
+\hline
+\endfirsthead
+\hline
+\rowcolor{gray!40}
+\textbf{Feature Name} & \textbf{Type} & \textbf{Mathematical Definition / Logic} & \textbf{Investigative Relevance} \\
+\hline
+\endhead
+\hline
+\endfoot
+\hline
+\endlastfoot
+\path{hist_tx_count} & Integer & Cumulative historical transaction count for source. & Lifetime account maturity and activity frequency. \\
+\hline
+\path{tx_count_last_step} & Integer & $\text{count}(\text{source}, t_{\text{current}})$ & Real-time velocity burst within 1-hour window. \\
+\hline
+\path{amount_vs_hist_mean} & Float & $\text{amount} / (\bar{W}_{\text{hist}} + 10^{-5})$ & Identifies sudden personal transaction spikes. \\
+\hline
+\path{total_amount_last_step} & Float & $\sum \text{amount}(\text{source}, t_{\text{current}})$ & Cumulative monetary throughput burst in window. \\
+\hline
+\path{time_since_last_tx} & Integer & $t_{\text{current}} - t_{\text{previous}}$ (clipped at 999 steps). & Inactivity gap between consecutive transactions. \\
+\hline
+\path{is_dormant_spike} & Binary & $\mathbb{I}(\text{time\_since\_last\_tx} \ge 90 \land \text{amount\_vs\_hist\_mean} \ge 5.0)$ & Detects reactivation of dormant money mule accounts. \\
+\hline
+\end{longtable}
+\endgroup
+
+\section{Graph Motifs and Adversarial Structuring Features}
+\begingroup
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{longtable}{|p{3.5cm}|p{1.5cm}|p{5.1cm}|p{4.2cm}|}
+\hline
+\rowcolor{gray!40}
+\textbf{Feature Name} & \textbf{Type} & \textbf{Mathematical Definition / Logic} & \textbf{Investigative Relevance} \\
+\hline
+\endfirsthead
+\hline
+\rowcolor{gray!40}
+\textbf{Feature Name} & \textbf{Type} & \textbf{Mathematical Definition / Logic} & \textbf{Investigative Relevance} \\
+\hline
+\endhead
+\hline
+\endfoot
+\hline
+\endlastfoot
+\path{motif_circular} & Binary & Directed cycle traversal: $u \rightarrow v_1 \rightarrow \dots \rightarrow u$ within 72h. & Uncovers complex cyclical layering paths. \\
+\hline
+\path{motif_smurfing} & Binary & Directed bipartite fan-in/fan-out imbalance within 24h. & Identifies structured placement and disbursement. \\
+\hline
+\path{motif_reversal} & Binary & Reciprocal flow $(u, v)$ followed by $(v, u)$ within 2h. & Flags rapid cancellation and reversal laundering. \\
+\hline
+\path{structuring_proximity} & Float & $\min(\text{amount} / 10,000,000\text{ UGX}, 1.0)$ & Continuous proximity ratio to CTR threshold. \\
+\hline
+\path{is_structuring_zone} & Binary & $\mathbb{I}(8,500,000\text{ UGX} \le \text{amount} < 10,000,000\text{ UGX})$ & Flags transactions in FATF structuring danger zone. \\
+\hline
+\path{cold_start_flag} & Binary & $\mathbb{I}(\text{hist\_tx\_count} \le 2)$ & Flags un-warmed newly created accounts. \\
+\hline
+\path{cold_start_structuring_risk} & Binary & $\text{cold\_start\_flag} \times \text{is\_structuring\_zone}$ & High-risk interaction: new account near threshold. \\
+\hline
+\end{longtable}
+\endgroup

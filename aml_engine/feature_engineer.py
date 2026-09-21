@@ -28,21 +28,31 @@ SNA_FEATURES = [
     'target_degree_cent', 'target_betweenness', 'target_pagerank',
     'terminal_pagerank', 'community_id', 'community_size',
     'is_cross_community', 'source_is_infrastructure', 'target_is_infrastructure',
+    'source_in_degree', 'source_out_degree',
+    'target_in_degree', 'target_out_degree',
+    'source_clustering_coef', 'target_clustering_coef',
+    'source_flow_through_ratio',
 ]
 
 TEMPORAL_FEATURES = [
     'hist_tx_count', 'tx_count_last_step', 'amount_vs_hist_mean',
     'total_amount_last_step', 'time_since_last_tx',
+    'is_dormant_spike',
 ]
 
 MOTIF_FEATURES = [
     'motif_circular', 'motif_smurfing', 'motif_reversal',
 ]
 
-ALL_FEATURES = TABULAR_FEATURES + SNA_FEATURES + TEMPORAL_FEATURES + MOTIF_FEATURES
+STRUCTURING_FEATURES = [
+    'structuring_proximity', 'is_structuring_zone',
+    'cold_start_flag', 'cold_start_structuring_risk',
+]
+
+ALL_FEATURES = TABULAR_FEATURES + SNA_FEATURES + TEMPORAL_FEATURES + MOTIF_FEATURES + STRUCTURING_FEATURES
 
 # Raw-only features (for ablation: "ML without SNA")
-RAW_ONLY_FEATURES = TABULAR_FEATURES + TEMPORAL_FEATURES + MOTIF_FEATURES
+RAW_ONLY_FEATURES = TABULAR_FEATURES + TEMPORAL_FEATURES + MOTIF_FEATURES + STRUCTURING_FEATURES
 
 # SNA-heavy features set
 SNA_ENHANCED_FEATURES = ALL_FEATURES
@@ -67,6 +77,14 @@ def build_tabular_features(df: pd.DataFrame, cfg: dict) -> pd.DataFrame:
     df['is_small_amount']  = (df['amount'] < smurfing_low).astype(int)
     df['is_large_amount']  = (df['amount'] >= threshold).astype(int)
     df['tran_type_encoded'] = _encode_tran_type(df)
+
+    # Structuring proximity features (FATF / Adversarial defense)
+    struct_thresh_pct = rules.get('structuring_threshold_percent', 0.85)
+    df['structuring_proximity'] = np.clip(df['amount'] / (threshold + 1e-5), 0.0, 1.0)
+    df['is_structuring_zone']   = (
+        (df['amount'] >= (threshold * struct_thresh_pct)) & 
+        (df['amount'] < threshold)
+    ).astype(int)
 
     # Ensure all required flag columns exist
     for col in ['isWithdrawTrx', 'isTransferTrx', 'isRefundTrx', 'isDepositTrx', 'isPurchaseTrx']:
@@ -104,6 +122,26 @@ def build_sna_features(df: pd.DataFrame, sna_features: Dict) -> pd.DataFrame:
     df['target_is_infrastructure'] = df['target'].astype(str).map(
         lambda x: sna_features.get(x, {}).get('is_infrastructure', 0))
 
+    # Directed Degrees (Fan-In / Fan-Out features)
+    df['source_in_degree']         = df['source'].astype(str).map(
+        lambda x: sna_features.get(x, {}).get('in_degree_cnt', sna_features.get(x, {}).get('in_degree', 0.0)))
+    df['source_out_degree']        = df['source'].astype(str).map(
+        lambda x: sna_features.get(x, {}).get('out_degree_cnt', sna_features.get(x, {}).get('out_degree', 0.0)))
+    df['target_in_degree']         = df['target'].astype(str).map(
+        lambda x: sna_features.get(x, {}).get('in_degree_cnt', sna_features.get(x, {}).get('in_degree', 0.0)))
+    df['target_out_degree']        = df['target'].astype(str).map(
+        lambda x: sna_features.get(x, {}).get('out_degree_cnt', sna_features.get(x, {}).get('out_degree', 0.0)))
+
+    # Local Clustering Coefficient (Collusive syndicate ring density)
+    df['source_clustering_coef']   = df['source'].astype(str).map(
+        lambda x: sna_features.get(x, {}).get('clustering_coefficient', 0.0))
+    df['target_clustering_coef']   = df['target'].astype(str).map(
+        lambda x: sna_features.get(x, {}).get('clustering_coefficient', 0.0))
+
+    # Flow-Through Turnover Ratio
+    df['source_flow_through_ratio'] = df['source'].astype(str).map(
+        lambda x: sna_features.get(x, {}).get('flow_through_ratio', 0.0))
+
     # Terminal (infrastructure) node PageRank
     df['terminal_pagerank']        = df['terminal_id'].astype(str).map(
         lambda x: sna_features.get(x, {}).get('pagerank', 0.0))
@@ -138,6 +176,20 @@ def build_temporal_features(df: pd.DataFrame) -> pd.DataFrame:
 
     # Time since last transaction (step-based proxy)
     df['time_since_last_tx'] = df.groupby('source')['step'].diff().fillna(999).clip(upper=999)
+
+    # Dormant account activity spike (inactive >= 90 steps and >= 5x historical mean)
+    df['is_dormant_spike'] = (
+        (df['hist_tx_count'] > 0) & 
+        (df['time_since_last_tx'] >= 90) & 
+        (df['amount_vs_hist_mean'] >= 5.0)
+    ).astype(int)
+
+    # Cold-start indicators (for adversarial evasion mitigation)
+    df['cold_start_flag'] = (df['hist_tx_count'] <= 2).astype(int)
+    if 'is_structuring_zone' in df.columns:
+        df['cold_start_structuring_risk'] = (df['cold_start_flag'] & df['is_structuring_zone']).astype(int)
+    else:
+        df['cold_start_structuring_risk'] = 0
 
     return df
 
