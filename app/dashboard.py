@@ -203,6 +203,7 @@ def _demo_interswitch(n=300):
     np.random.seed(42)
     risk = np.random.beta(1.5, 8, n)
     risk[np.random.choice(n, n//12)] = np.random.beta(5, 2, n//12)
+    rule_trig = np.random.choice([0, 1], n, p=[0.82, 0.18])
     return pd.DataFrame({
         'source':        [f'ACC_{i:05d}' for i in np.random.randint(0,800,n)],
         'target':        [f'ACC_{i:05d}' for i in np.random.randint(0,800,n)],
@@ -210,13 +211,15 @@ def _demo_interswitch(n=300):
         'amount':        np.random.exponential(80000, n),
         'tran_type':     np.random.choice(['TRANSFER','WITHDRAWAL','PAYMENT','CASH_OUT'],n),
         'step':          np.arange(n),
-        'rule_triggered':np.random.choice([0,1],n,p=[0.82,0.18]),
+        'rule_triggered':rule_trig,
+        'rule_score':    rule_trig * np.random.randint(1, 4, n),
         'ml_risk_score': risk,
         'ml_flagged':    (risk>=0.5).astype(int),
         'motif_circular':np.random.choice([0,1],n,p=[0.96,0.04]),
         'motif_smurfing':np.random.choice([0,1],n,p=[0.94,0.06]),
         'motif_reversal':np.random.choice([0,1],n,p=[0.93,0.07]),
     })
+
 
 def _demo_importance():
     data = [
@@ -1374,6 +1377,7 @@ with tab8:
         return default
         
     def save_json_db(path, data):
+        os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=2)
 
@@ -1388,6 +1392,18 @@ with tab8:
         st.warning("Please run the pipeline to load the live dataset.")
 
     if not df_alerts.empty:
+        # Guarantee required columns exist regardless of data source
+        if 'source' not in df_alerts.columns:
+            df_alerts['source'] = [f'ACC_{i:04d}' for i in range(len(df_alerts))]
+        if 'amount' not in df_alerts.columns:
+            df_alerts['amount'] = 0.0
+        if 'tran_type' not in df_alerts.columns:
+            df_alerts['tran_type'] = 'TRANSFER'
+        if 'rule_score' not in df_alerts.columns:
+            df_alerts['rule_score'] = df_alerts.get('rule_triggered', pd.Series([0]*len(df_alerts)))
+        if 'ml_risk_score' not in df_alerts.columns:
+            df_alerts['ml_risk_score'] = 0.0
+
         # Determine status
         df_alerts['Status'] = df_alerts['source'].apply(lambda x: dispositions.get(str(x), {}).get('status', 'PENDING'))
         df_alerts['Mark Type'] = df_alerts['source'].apply(lambda x: dispositions.get(str(x), {}).get('mark_type', 'None'))
@@ -1403,7 +1419,8 @@ with tab8:
         
         st.markdown("#### ⏳ Pending Queue")
         if not df_pending.empty:
-            st.dataframe(df_pending[['source', 'amount', 'tran_type', 'rule_score', 'ml_risk_score']], use_container_width=True, height=200)
+            cols_to_show = [c for c in ['source', 'amount', 'tran_type', 'rule_score', 'ml_risk_score'] if c in df_pending.columns]
+            st.dataframe(df_pending[cols_to_show], use_container_width=True, height=200)
             
             st.markdown("#### 🔎 Mark Fraud / Apply Disposition")
             selected_alert = st.selectbox("Select Account ID to review:", df_pending['source'].tolist())
