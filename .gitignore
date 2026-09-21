@@ -1,6 +1,7 @@
 # CSV and Data Files
 *.csv
 *.txt
+!requirements.txt
 *.json
 *.pkl
 

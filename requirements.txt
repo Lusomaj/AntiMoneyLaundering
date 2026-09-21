@@ -1,0 +1,42 @@
+# XAI-SNA AML System — Dependencies
+# Install: pip install -r requirements.txt
+
+# Core data science
+pandas>=2.0
+numpy>=1.24
+scipy>=1.11
+
+# Machine Learning
+scikit-learn>=1.3
+xgboost>=2.0
+imbalanced-learn>=0.12
+
+# Graph / Network Analysis
+networkx>=3.1
+python-louvain>=0.16   # community detection (louvain-community)
+
+# Explainability
+shap>=0.44
+
+# Visualization / Dashboard
+streamlit>=1.35
+plotly>=5.18
+pyvis>=0.3.2
+matplotlib>=3.7
+seaborn>=0.13
+
+# Configuration
+pyyaml>=6.0
+
+# Utilities
+joblib>=1.3
+tqdm>=4.66
+
+# Optional: Graph Neural Network (GAT)
+# torch>=2.0
+# torch-geometric>=2.5
+
+# Optional: Streaming architecture (production only)
+# kafka-python>=2.0
+# pyspark>=3.5
+

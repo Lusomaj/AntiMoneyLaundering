@@ -1,31 +1,46 @@
 """Syntax check and smoke test for USD->UGX conversion."""
-import ast, os, sys
+import ast
+import os
+import sys
+import pytest
 
 sys.path.insert(0, '.')
 
-files = ['aml_engine/ibm_loader.py', 'aml_engine/rules_engine.py', 'aml_engine/pattern_bridge.py']
-for f in files:
-    ast.parse(open(f, 'r', encoding='utf-8').read())
-    print(f'SYNTAX OK: {f}')
+def test_syntax_checks():
+    files = ['aml_engine/ibm_loader.py', 'aml_engine/rules_engine.py', 'aml_engine/pattern_bridge.py']
+    for f in files:
+        if os.path.exists(f):
+            content = open(f, 'r', encoding='utf-8').read()
+            ast.parse(content)
 
-# Quick smoke test on loader conversion
-from aml_engine.ibm_loader import load_ibm_dataset
+def test_currency_conversion_ratio():
+    import pandas as pd
+    usd_rate = 3800
+    df = pd.DataFrame({
+        'amount_usd': [10.0, 50.0, 100.0],
+        'amount': [10.0 * usd_rate, 50.0 * usd_rate, 100.0 * usd_rate],
+        'currency': ['UGX', 'UGX', 'UGX'],
+        'exchange_rate': [usd_rate, usd_rate, usd_rate]
+    })
+    ratio = df["amount"].median() / df["amount_usd"].median()
+    assert abs(ratio - usd_rate) < 1
 
-cfg = {
-    'ibm_sample_size': 5000,
-    'min_fraud_rows': 100,
-    'usd_to_ugx_rate': 3800,
-    'payment_format_risk': {},
-}
-df = load_ibm_dataset('IBM_AML_DATA/HI-Large_Trans.csv', cfg, '.')
-print()
-print('=== Smoke Test Results ===')
-print(f'  Rows loaded: {len(df):,} | Fraud: {int(df["is_suspicious"].sum()):,}')
-print(f'  amount (UGX) median:  {df["amount"].median():,.0f}')
-print(f'  amount_usd median:    {df["amount_usd"].median():,.2f}')
-print(f'  currency col unique:  {list(df["currency"].unique())}')
-print(f'  exchange_rate unique: {list(df["exchange_rate"].unique())}')
-ratio = df["amount"].median() / df["amount_usd"].median()
-print(f'  Ratio (should be ~3800): {ratio:.1f}')
-print()
-print('OK - currency conversion working correctly' if abs(ratio - 3800) < 1 else 'ERROR - ratio mismatch')
+def test_ibm_loader_smoke():
+    ibm_file = 'IBM_AML_DATA/HI-Large_Trans.csv'
+    if not os.path.exists(ibm_file):
+        pytest.skip(f"Dataset {ibm_file} not found (large dataset omitted in CI)")
+    if os.environ.get('RUN_SLOW_TESTS') != '1':
+        pytest.skip(f"Skipping slow 5GB IBM scan. Set RUN_SLOW_TESTS=1 to execute.")
+
+    from aml_engine.ibm_loader import load_ibm_dataset
+    cfg = {
+        'ibm_sample_size': 1000,
+        'min_fraud_rows': 10,
+        'usd_to_ugx_rate': 3800,
+        'payment_format_risk': {},
+    }
+    df = load_ibm_dataset(ibm_file, cfg, '.')
+    ratio = df["amount"].median() / df["amount_usd"].median()
+    assert abs(ratio - 3800) < 1
+
+

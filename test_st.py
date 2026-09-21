@@ -1,2 +1,6 @@
+"""Smoke test for Streamlit import."""
 import streamlit as st
-st.write("Hello World")
+
+def test_streamlit_installed():
+    assert hasattr(st, 'write')
+
