@@ -7,9 +7,9 @@
 
 # Directories to ignore
 IBM_AML_DATA/
-data/models/
-data/processed/
-data/shap/
+#data/models/
+#data/processed/
+#data/shap/
 __pycache__/
 
 # Scratch and Large Files
