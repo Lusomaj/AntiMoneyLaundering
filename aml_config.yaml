@@ -123,3 +123,9 @@ paths:
   shap_dir: data/shap
   graphs_dir: data/graphs
 
+ui_settings:
+  # Controls visibility of 'Run Stages' buttons in sidebar
+  # Options: 'auto' (hidden on GitHub/Cloud, visible locally), true, or false
+  show_stage_buttons: auto
+
+

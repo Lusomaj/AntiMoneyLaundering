@@ -291,70 +291,100 @@ streamlit run app/dashboard.py
     # ── Live Pipeline Executor ───────────────────────────────────────
     st.markdown("---")
     st.markdown("### ⚡ Run Stages")
-    st.caption("Executes scripts server-side using the current environment.")
 
-    def _run_stage(script_name, status_ph, out_ph):
-        """Stream a pipeline script's stdout into the Streamlit sidebar."""
-        script_path = os.path.join(ROOT, script_name)
-        status_ph.info(f"⏳ Running `{script_name}` …")
-        lines = []
-        try:
-            proc = subprocess.Popen(
-                [sys.executable, script_path],
-                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                text=True, bufsize=1, cwd=ROOT,
-                env={**os.environ, 'PYTHONIOENCODING': 'utf-8'},
-            )
-            for raw_line in proc.stdout:
-                lines.append(raw_line.rstrip())
-                # Show rolling last 35 lines so sidebar stays scrollable
-                out_ph.code('\n'.join(lines[-35:]), language='bash')
-            proc.wait()
-            if proc.returncode == 0:
-                status_ph.success(f"✅ `{script_name}` complete!")
-                st.cache_data.clear()
-                return True
-            else:
-                status_ph.error(f"❌ `{script_name}` failed (exit {proc.returncode})")
+    # Detect whether running in Streamlit Cloud / GitHub environment vs local
+    is_cloud_env = (
+        os.path.exists('/mount/src') or
+        os.environ.get('STREAMLIT_SHARING_MODE') is not None or
+        not os.path.exists(os.path.join(ROOT, 'IBM_AML_DATA'))
+    )
+
+    # Check configuration override in aml_config.yaml or environment variable
+    cfg_stage_mode = cfg.get('ui_settings', {}).get('show_stage_buttons', 'auto')
+    if isinstance(cfg_stage_mode, bool):
+        show_stage_buttons = cfg_stage_mode
+    elif str(cfg_stage_mode).lower() in ('true', '1', 'yes', 'show'):
+        show_stage_buttons = True
+    elif str(cfg_stage_mode).lower() in ('false', '0', 'no', 'hide'):
+        show_stage_buttons = False
+    else:
+        # 'auto': Visible locally, hidden on GitHub / Streamlit Cloud
+        show_stage_buttons = not is_cloud_env
+
+    def _render_stage_buttons():
+        def _run_stage(script_name, status_ph, out_ph):
+            """Stream a pipeline script's stdout into the Streamlit sidebar."""
+            script_path = os.path.join(ROOT, script_name)
+            status_ph.info(f"⏳ Running `{script_name}` …")
+            lines = []
+            try:
+                proc = subprocess.Popen(
+                    [sys.executable, script_path],
+                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                    text=True, bufsize=1, cwd=ROOT,
+                    env={**os.environ, 'PYTHONIOENCODING': 'utf-8'},
+                )
+                for raw_line in proc.stdout:
+                    lines.append(raw_line.rstrip())
+                    # Show rolling last 35 lines so sidebar stays scrollable
+                    out_ph.code('\n'.join(lines[-35:]), language='bash')
+                proc.wait()
+                if proc.returncode == 0:
+                    status_ph.success(f"✅ `{script_name}` complete!")
+                    st.cache_data.clear()
+                    return True
+                else:
+                    status_ph.error(f"❌ `{script_name}` failed (exit {proc.returncode})")
+                    return False
+            except Exception as exc:
+                status_ph.error(f"❌ Error: {exc}")
                 return False
-        except Exception as exc:
-            status_ph.error(f"❌ Error: {exc}")
-            return False
 
-    btn_s1  = st.button("▶ Stage 1 · Train IBM Model",      use_container_width=True,
-                         help="Trains RF/XGB/MLP/Stacked/GAT on IBM labeled dataset (~1-2 hrs)")
-    btn_pre = st.button("▶ Stage 1b · Prep ISW Data",       use_container_width=True,
-                         help="Preprocesses Interswitch Uganda ATM/Agent dataset")
-    btn_s23 = st.button("▶ Stage 2+3 · Bridge + Field Test",use_container_width=True,
-                         help="Pattern Bridge + KPI evaluation + SHAP on Interswitch")
-    btn_all = st.button("🚀 Run All Stages In Order",        use_container_width=True, type="primary",
-                         help="Runs Stage 1 → ISW Prep → Stage 2+3 sequentially")
+        btn_s1  = st.button("▶ Stage 1 · Train IBM Model",      use_container_width=True,
+                             help="Trains RF/XGB/MLP/Stacked/GAT on IBM labeled dataset (~1-2 hrs)")
+        btn_pre = st.button("▶ Stage 1b · Prep ISW Data",       use_container_width=True,
+                             help="Preprocesses Interswitch Uganda ATM/Agent dataset")
+        btn_s23 = st.button("▶ Stage 2+3 · Bridge + Field Test",use_container_width=True,
+                             help="Pattern Bridge + KPI evaluation + SHAP on Interswitch")
+        btn_all = st.button("🚀 Run All Stages In Order",        use_container_width=True, type="primary",
+                             help="Runs Stage 1 → ISW Prep → Stage 2+3 sequentially")
 
-    _status_ph = st.empty()
-    _out_ph    = st.empty()
+        _status_ph = st.empty()
+        _out_ph    = st.empty()
 
-    if btn_s1:
-        _run_stage('phase0_ibm_pipeline.py', _status_ph, _out_ph)
+        if btn_s1:
+            _run_stage('phase0_ibm_pipeline.py', _status_ph, _out_ph)
 
-    elif btn_pre:
-        _run_stage('phase1_data_prep.py', _status_ph, _out_ph)
+        elif btn_pre:
+            _run_stage('phase1_data_prep.py', _status_ph, _out_ph)
 
-    elif btn_s23:
-        _run_stage('phase_interswitch_fieldtest.py', _status_ph, _out_ph)
+        elif btn_s23:
+            _run_stage('phase_interswitch_fieldtest.py', _status_ph, _out_ph)
 
-    elif btn_all:
-        _stages = [
-            'phase0_ibm_pipeline.py',
-            'phase1_data_prep.py',
-            'phase_interswitch_fieldtest.py',
-        ]
-        for _sc in _stages:
-            _ok = _run_stage(_sc, _status_ph, _out_ph)
-            if not _ok:
-                _status_ph.error(f"🛑 Pipeline halted at `{_sc}`. Fix errors above then re-run.")
-                break
-        else:
-            _status_ph.success("🎉 All 3 stages complete! Reload the page to see real data.")
+        elif btn_all:
+            _stages = [
+                'phase0_ibm_pipeline.py',
+                'phase1_data_prep.py',
+                'phase_interswitch_fieldtest.py',
+            ]
+            for _sc in _stages:
+                _ok = _run_stage(_sc, _status_ph, _out_ph)
+                if not _ok:
+                    _status_ph.error(f"🛑 Pipeline halted at `{_sc}`. Fix errors above then re-run.")
+                    break
+            else:
+                _status_ph.success("🎉 All 3 stages complete! Reload the page to see real data.")
+
+    if show_stage_buttons:
+        st.caption("Executes scripts server-side using the current environment.")
+        _render_stage_buttons()
+    else:
+        st.caption("☁️ *Server-side execution is disabled on Cloud (demo mode). Raw 5GB dataset is stored locally.*")
+        with st.expander("🛠️ Show Pipeline Controls (Dev Override)", expanded=False):
+            st.warning("⚠️ Full datasets are not stored on Cloud. Running stages here will fail unless data is present.")
+            if st.checkbox("Unlock Execution Buttons"):
+                _render_stage_buttons()
+
     st.markdown("---")
     rules = cfg.get('hard_rules', {})
     st.markdown("### 📋 Active Rules")
